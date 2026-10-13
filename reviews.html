@@ -359,7 +359,7 @@ document.addEventListener("click",e=>{
 });
 if($("#grid"))["#q","#coll","#sort","#stock","#pmin","#pmax"].forEach(s=>$(s).addEventListener("input",render));
 document.querySelectorAll("[data-wa]").forEach(a=>a.href=waLink(null));
-const REVIEWS_URL=""; // paste the published CSV link of your Reviews sheet here
+const REVIEWS_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTmvbhtuBCM4iUzvWPCWDTnyxbmCeFaFtQGtnt1U-5pKGT9GncabnYiWCfWUL_HyA/pubhtml"; // paste the published CSV link of your Reviews sheet here
 const stars=n=>"★".repeat(n)+"☆".repeat(5-n);
 function videoHTML(v){
   if(!v)return "";
