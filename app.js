@@ -6,7 +6,7 @@ const WA="918925552441"; // WhatsApp number with country code, no +
 const BACKUP_CSV="catalogue-backup.csv"; // saved copy, used only if Google Sheets cannot be reached
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const state={all:[],cat:"Saree",coll:""};
+const state={all:[],cat:"Saree",tc:{},fc:{}};
 // Website tabs: [value in the sheet's Category column, tab label, one item, many items]
 const CATS=[["Saree","Sarees","saree","sarees"],["Salwar","Salwar Suits","salwar suit","salwar suits"],["Kurti","Kurtis & Gowns","style","styles"],["Lehenga","Lehengas","lehenga","lehengas"],["Cord-set","Cord-sets","cord-set","cord-sets"]];
 // Sheet headings the site understands (any capitals, spaces or dashes): heading -> internal name
@@ -38,7 +38,7 @@ const waLink=p=>"https://wa.me/"+WA+"?text="+encodeURIComponent(
   p?`Hi Tarasvini, I'd like to order:\n${p.name}\nCode: ${p.id}\nPrice: ${inr(p.price)}${p.colours>1?"\nColour: ":""}${p.sizes?"\nSize: ":""}\nPlease confirm availability and delivery.`
    :"Hi Tarasvini, I'd like to know more about your products.");
 
-// Category colours: [strong, light tint]; used for tiles and photo placeholders
+// Category colours: [strong, light tint]; used for photo placeholders
 const CCOL={Saree:["#B43C18","#F7E3DB"],Salwar:["#B0185A","#F7DCE8"],Kurti:["#0F6B6B","#D8ECEB"],Lehenga:["#C9850A","#FBEACB"],"Cord-set":["#3C3C18","#E8E8D8"]};
 const ccol=k=>CCOL[k]||["#B43C18","#F7E3DB"];
 function ph(p,big,imgIdx=0){
@@ -48,7 +48,9 @@ function ph(p,big,imgIdx=0){
 }
 const tags=p=>p.sold?'<span class="tag sold">Sold out</span>':p.feat?'<span class="tag feat">Featured</span>':"";
 
-const getImgs=o=>{const seen=[];Object.keys(o).filter(k=>/^image_url(_\d+)?$/.test(k)).sort((a,b)=>(parseInt(a.split("_")[2])||1)-(parseInt(b.split("_")[2])||1)).forEach(k=>String(o[k]||"").split(/[\s,|]+/).forEach(u=>{u=u.trim();if(u&&!seen.includes(u))seen.push(u)}));return seen.slice(0,8)};
+// Google Drive share links -> direct image links (the file must be shared "Anyone with the link")
+const imgURL=u=>{const m=u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]{20,})/)||u.match(/docs\.google\.com\/uc\?(?:export=\w+&)?id=([\w-]{20,})/);return m?"https://lh3.googleusercontent.com/d/"+m[1]+"=w1200":u};
+const getImgs=o=>{const seen=[];Object.keys(o).filter(k=>/^image_url(_\d+)?$/.test(k)).sort((a,b)=>(parseInt(a.split("_")[2])||1)-(parseInt(b.split("_")[2])||1)).forEach(k=>String(o[k]||"").split(/[\s,|]+/).forEach(u=>{u=imgURL(u.trim());if(u&&!seen.includes(u))seen.push(u)}));return seen.slice(0,8)};
 function load(){
   fetch(CSV_URL).then(r=>{if(!r.ok)throw 0;return r.text()}).then(t=>{const h=(parseCSV(t)[0]||[]).map(hkey);if(!h.includes("id")||!h.includes("name"))throw 0;return t}).catch(()=>{$("#note").hidden=false;return fetch(BACKUP_CSV).then(r=>{if(!r.ok)throw 0;return r.text()})}).then(t=>{
     const rows=parseCSV(t), head=rows[0].map(hkey);
@@ -70,52 +72,96 @@ function init(){
   if(qs.get("q")){$("#q").value=qs.get("q");if(!m){const best=present().map(c=>[c[0],state.all.filter(p=>p.category===c[0]&&hit(p,qs.get("q").toLowerCase())).length]).sort((a,b)=>b[1]-a[1])[0];if(best&&best[1])state.cat=best[0]}}
   const it=qs.get("item"),ip=it&&state.all.find(x=>x.id===it); if(ip)state.cat=ip.category;
   if(!state.all.some(p=>p.category===state.cat)&&present().length)state.cat=present()[0][0];
-  // category tiles
-  $("#tiles").innerHTML=present().map(([k,l,one,many_])=>{
-    const its=state.all.filter(p=>p.category===k),pr=its.map(p=>p.price).filter(Boolean);
-    return `<button class="tile${k==="Lehenga"?" light":""}" type="button" data-cat="${k}" style="--c:${ccol(k)[0]}"><b>${esc(l)}</b><span>${its.length} ${its.length===1?one:many_}${pr.length?", from "+inr(Math.min(...pr)):""}</span><div class="zari" aria-hidden="true"></div></button>`}).join("");
+  buildFeatured();
   // hide nav links for empty categories
   document.querySelectorAll(".nav a[data-cat]").forEach(a=>a.hidden=!state.all.some(p=>p.category===a.dataset.cat));
   setCat(state.cat,false);
   if(qs.get("q"))document.getElementById("shop").scrollIntoView();
   if(ip)openDlg(ip.id);
 }
+// Featured carousel: products marked Featured = yes; topped up with a mix from each category
+function buildFeatured(){
+  const tr=$("#ftrack"); if(!tr)return;
+  let list=state.all.filter(p=>p.feat&&!p.sold);
+  if(list.length<6){
+    const pools=present().map(c=>state.all.filter(p=>p.category===c[0]&&!p.sold&&!p.feat));
+    for(let i=0;list.length<9&&pools.some(x=>x[i]);i++)pools.forEach(x=>{if(x[i]&&list.length<9)list.push(x[i])});
+  }
+  $("#feat").hidden=!list.length;
+  tr.innerHTML=list.map(cardHTML).join("");
+  if(tr._ready)return;tr._ready=true;
+  const step=()=>{const c=tr.querySelector(".card");return c?c.offsetWidth+parseFloat(getComputedStyle(tr).columnGap||0):300};
+  const smooth=()=>matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth";
+  const go=d=>{
+    if(d>0&&tr.scrollLeft+tr.clientWidth>=tr.scrollWidth-4)tr.scrollTo({left:0,behavior:smooth()});
+    else if(d<0&&tr.scrollLeft<=4)tr.scrollTo({left:tr.scrollWidth,behavior:smooth()});
+    else tr.scrollBy({left:d*step(),behavior:smooth()});
+  };
+  $("#fprev").onclick=()=>go(-1);$("#fnext").onclick=()=>go(1);
+  let paused=matchMedia("(prefers-reduced-motion: reduce)").matches,hold=false;
+  const pb=$("#fpause"),sync=()=>{pb.textContent=paused?"Play":"Pause";pb.setAttribute("aria-pressed",paused)};
+  sync();pb.onclick=()=>{paused=!paused;sync()};
+  const f=$("#feat");
+  f.addEventListener("mouseenter",()=>hold=true);f.addEventListener("mouseleave",()=>hold=false);
+  f.addEventListener("focusin",()=>hold=true);f.addEventListener("focusout",()=>hold=false);
+  tr.addEventListener("touchstart",()=>hold=true,{passive:true});tr.addEventListener("touchend",()=>setTimeout(()=>hold=false,5000),{passive:true});
+  setInterval(()=>{if(!paused&&!hold&&!document.hidden&&!$("#dlg").open)go(1)},5000);
+}
 function setCat(k,scroll){
-  state.cat=k;state.coll="";$("#fab").value="";$("#price").value="";
+  state.cat=k;resetSel();
   document.querySelectorAll(".nav a[data-cat]").forEach(a=>a.setAttribute("aria-current",a.dataset.cat===k?"true":"false"));
   try{const u=new URL(location.href);u.searchParams.set("cat",k);u.searchParams.delete("item");history.replaceState(null,"",u)}catch(e){}
   buildFilters();
   if(scroll)document.getElementById("shop").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
 }
+// Filter panel: tick-boxes for type and fabric, one price band, in-stock
+const PRICES=[["","Any price"],["0-999","Under ₹1,000"],["1000-1499","₹1,000 to ₹1,499"],["1500-1999","₹1,500 to ₹1,999"],["2000-2999","₹2,000 to ₹2,999"],["3000-","₹3,000 and above"]];
+const sel={type:new Set(),fab:new Set(),price:""};
+function resetSel(){sel.type.clear();sel.fab.clear();sel.price="";const s=$("#stock");if(s)s.checked=false}
+const SHOW=8;
+function optList(box,key,counts,expanded){
+  const keys=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]||a.localeCompare(b));
+  const vis=expanded||keys.length<=SHOW+2?keys:keys.slice(0,SHOW);
+  box.innerHTML=vis.map(k=>`<label class="fopt"><input type="checkbox" data-f="${key}" value="${esc(k)}"${sel[key].has(k)?" checked":""}><span>${esc(k)}</span><small>${counts[k]}</small></label>`).join("")+
+    (vis.length<keys.length?`<button class="more" type="button" data-more="${key}">Show all ${keys.length}</button>`:"")+
+    (expanded&&keys.length>SHOW+2?`<button class="more" type="button" data-less="${key}">Show fewer</button>`:"");
+}
 function buildFilters(){
-  const items=inCat();
+  const items=inCat(), tc={}, fc={};
   $("#shoph").textContent=label();
-  const fabs=[...new Set(items.map(p=>p.fabric_group).filter(Boolean))].sort();
-  $("#fab").innerHTML='<option value="">All fabrics</option>'+fabs.map(f=>`<option>${esc(f)}</option>`).join("");
-  $("#fab").parentElement.hidden=fabs.length<2;
-  const g={};items.forEach(p=>{if(p.coll)g[p.coll]=(g[p.coll]||0)+1});
-  const types=Object.keys(g).sort((a,b)=>g[b]-g[a]||a.localeCompare(b));
-  $("#types").innerHTML=types.length>1?[`<button class="pill" type="button" data-coll="" aria-pressed="true">All ${esc(CAT()[3])}<small>${items.length}</small></button>`,...types.map(t=>`<button class="pill" type="button" data-coll="${esc(t)}" aria-pressed="false">${esc(t)}<small>${g[t]}</small></button>`)].join(""):"";
-  $("#types").scrollLeft=0;
+  items.forEach(p=>{if(p.coll)tc[p.coll]=(tc[p.coll]||0)+1;if(p.fabric_group)fc[p.fabric_group]=(fc[p.fabric_group]||0)+1});
+  state.tc=tc;state.fc=fc;
+  optList($("#o-type"),"type",tc,false);$("#g-type").hidden=Object.keys(tc).length<2;
+  optList($("#o-fab"),"fab",fc,false);$("#g-fab").hidden=Object.keys(fc).length<2;
+  $("#o-price").innerHTML=PRICES.map(([v,l])=>`<label class="fopt"><input type="radio" name="price" value="${v}"${sel.price===v?" checked":""}><span>${l}</span></label>`).join("");
   render();
 }
 const hit=(p,q)=>(p.name+" "+p.id+" "+p.coll+" "+p.fabric_group).toLowerCase().includes(q);
-function priceOK(p){const v=$("#price").value;if(!v)return true;const [a,b]=v.split("-");return p.price>=(+a||0)&&(!b||p.price<=+b)}
+function priceOK(p){if(!sel.price)return true;const [a,b]=sel.price.split("-");return p.price>=(+a||0)&&(!b||p.price<=+b)}
 function render(){
   if(!inCat().length){
-    $("#count").textContent="Coming soon";
+    $("#count").textContent="Coming soon";$("#active").innerHTML="";
     $("#grid").innerHTML=`<div class="empty"><p>We are adding ${label().toLowerCase()} to the catalogue. Ask us on WhatsApp what is available now.</p><a class="btn wa" href="https://wa.me/${WA}?text=${encodeURIComponent("Hi Tarasvini, do you have "+label().toLowerCase()+" available?")}" target="_blank" rel="noopener">${IC.wa}Ask on WhatsApp</a></div>`;
     return;
   }
-  const q=$("#q").value.toLowerCase().trim(), fab=$("#fab").value, stock=$("#stock").checked, sort=$("#sort").value;
-  let list=state.all.filter(p=>p.category===state.cat&&(!fab||p.fabric_group===fab)&&(!state.coll||p.coll===state.coll)&&(!stock||!p.sold)&&priceOK(p)&&
-    (!q||hit(p,q)));
+  const qv=$("#q").value.trim(), q=qv.toLowerCase(), stock=$("#stock").checked, sort=$("#sort").value;
+  let list=state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!stock||!p.sold)&&priceOK(p)&&(!q||hit(p,q)));
   list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(b.feat-a.feat)||(a.sold-b.sold)||(a.i-b.i));
-  const active=!!(q||fab||state.coll||stock||$("#price").value);
-  $("#clr").hidden=!active;
-  ["#fab","#price"].forEach(s=>$(s).classList.toggle("on",!!$(s).value));
-  $("#count").textContent=q?`${many(list.length)} matching “${$("#q").value.trim()}”`:many(list.length);
-  $("#grid").innerHTML=list.length?list.map(p=>`
+  // chips for what is selected
+  const chips=[...[...sel.type].map(v=>["type",v,v]),...[...sel.fab].map(v=>["fab",v,v])];
+  if(sel.price)chips.push(["price","",PRICES.find(x=>x[0]===sel.price)[1]]);
+  if(stock)chips.push(["stock","","In stock only"]);
+  if(q)chips.push(["q","",`Search: “${qv}”`]);
+  $("#active").innerHTML=chips.length?chips.map(([k,v,l])=>`<button class="achip" type="button" data-rm="${k}" data-v="${esc(v)}" aria-label="Remove ${esc(l)}">${esc(l)}<b aria-hidden="true">×</b></button>`).join("")+'<button class="linkbtn" type="button" onclick="clearFilters()">Clear all</button>':"";
+  const n=sel.type.size+sel.fab.size+(sel.price?1:0)+(stock?1:0);
+  $("#fcount").textContent=n||"";
+  $("#fdone").textContent=list.length?`Show ${many(list.length)}`:"No matches";
+  $("#count").textContent=q?`${many(list.length)} matching “${qv}”`:many(list.length);
+  $("#grid").innerHTML=list.length?list.map(cardHTML).join(""):`<div class="empty"><p>No ${CAT()[3]} match ${q?"“"+esc(qv)+"”":"these filters"}.</p>${q?present().filter(c=>c[0]!==state.cat).map(c=>[c,state.all.filter(p=>p.category===c[0]&&hit(p,q)).length]).filter(x=>x[1]).map(([c,n])=>`<button class="btn" type="button" data-cat="${c[0]}">See ${n} in ${esc(c[1])}</button> `).join(""):""}<button class="btn" type="button" onclick="clearFilters()">Clear filters</button></div>`;
+}
+function syncPanel(){document.querySelectorAll("#fpanel [data-f]").forEach(i=>i.checked=sel[i.dataset.f].has(i.value));document.querySelectorAll("#fpanel [name=price]").forEach(i=>i.checked=i.value===sel.price)}
+function openPanel(o){const f=$("#fpanel");f.classList.toggle("is-open",o);$("#ftoggle").setAttribute("aria-expanded",o);document.body.style.overflow=o?"hidden":"";if(o)$("#fclose").focus();else $("#ftoggle").focus()}
+const cardHTML=p=>`
     <article class="card${p.sold?" is-sold":""}">
       <button class="open" type="button" data-id="${esc(p.id)}" aria-label="${esc(p.name)}, ${p.price?inr(p.price):""}">
         ${ph(p)}
@@ -123,10 +169,8 @@ function render(){
           <div class="prow"><span class="price">${p.price?inr(p.price):""}</span>${cols(p)?`<span class="cols">${cols(p)}</span>`:""}</div></div>
       </button>
       ${p.sold?'<button class="btn order" type="button" disabled>Sold out</button>':`<a class="btn order" href="${waLink(p)}" target="_blank" rel="noopener">${IC.wa}Order on WhatsApp</a>`}
-    </article>`).join(""):`<div class="empty"><p>No ${CAT()[3]} match ${q?"“"+esc($("#q").value.trim())+"”":"these filters"}.</p>${q?present().filter(c=>c[0]!==state.cat).map(c=>[c,state.all.filter(p=>p.category===c[0]&&hit(p,q)).length]).filter(x=>x[1]).map(([c,n])=>`<button class="btn" type="button" data-cat="${c[0]}" data-keepq>See ${n} in ${esc(c[1])}</button> `).join(""):""}<button class="btn" type="button" onclick="clearFilters()">Clear filters</button></div>`;
-}
-function clearFilters(){$("#q").value="";$("#fab").value="";$("#price").value="";$("#stock").checked=false;state.coll="";
-  document.querySelectorAll(".pill").forEach(b=>b.setAttribute("aria-pressed",b.dataset.coll===""));render()}
+    </article>`;
+function clearFilters(){$("#q").value="";resetSel();buildFilters()}
 function openDlg(id){
   const p=state.all.find(x=>x.id===id); if(!p)return;
   const imgs=p.imgs, v=p.video_url;
@@ -169,8 +213,11 @@ function openDlg(id){
 
 document.addEventListener("click",e=>{
   if(!$("#grid"))return;
-  const pill=e.target.closest(".pill");
-  if(pill){state.coll=pill.dataset.coll;document.querySelectorAll(".pill").forEach(b=>b.setAttribute("aria-pressed",b===pill));render();return}
+  const rm=e.target.closest("[data-rm]");
+  if(rm){const k=rm.dataset.rm,v=rm.dataset.v;if(k==="type"||k==="fab")sel[k].delete(v);else if(k==="price")sel.price="";else if(k==="stock")$("#stock").checked=false;else if(k==="q")$("#q").value="";
+    syncPanel();render();return}
+  const mo=e.target.closest("[data-more],[data-less]");
+  if(mo){const k=mo.dataset.more||mo.dataset.less;optList($(k==="type"?"#o-type":"#o-fab"),k,k==="type"?state.tc:state.fc,!!mo.dataset.more);return}
   const t=e.target.closest("[data-cat]");
   if(t&&!e.metaKey&&!e.ctrlKey){e.preventDefault();setCat(t.dataset.cat,true);return}
   const o=e.target.closest(".open"); if(o){openDlg(o.dataset.id);return}
@@ -263,9 +310,15 @@ document.addEventListener("click",e=>{
 });
 
 if($("#grid")){
-  ["#fab","#price","#sort","#stock"].forEach(x=>$(x).addEventListener("change",render));
+  $("#sort").addEventListener("change",render);
   $("#q").addEventListener("input",render);
+  $("#fpanel").addEventListener("change",e=>{const t=e.target;
+    if(t.dataset.f){sel[t.dataset.f][t.checked?"add":"delete"](t.value)}else if(t.name==="price")sel.price=t.value;
+    render()});
   $("#clr").onclick=clearFilters;
+  $("#ftoggle").onclick=()=>openPanel(true);$("#fclose").onclick=()=>openPanel(false);
+  $("#fdone").onclick=()=>{openPanel(false);document.getElementById("shop").scrollIntoView()};
+  addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#fpanel").classList.contains("is-open"))openPanel(false)});
   $("#hsearch").addEventListener("submit",e=>{e.preventDefault();render();document.getElementById("shop").scrollIntoView()});
   const setH=()=>{const h=$("#siteh");document.documentElement.style.setProperty("--hh",(getComputedStyle(h).position==="sticky"?h.offsetHeight:0)+"px")};
   setH();addEventListener("resize",setH);

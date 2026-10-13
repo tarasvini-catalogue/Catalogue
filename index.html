@@ -24,7 +24,6 @@
 <main id="main">
 <section class="hero"><div class="wrap">
 <div class="intro"><img src="assets/logo.png" alt="Tarasvini" width="640" height="414"><h1>Timeless beauty and quiet radiance for everyday life.</h1><p>Sarees, salwar suits, kurtis and lehengas, chosen with care. Browse the catalogue, then order on WhatsApp.</p><div class="links"><a class="btn primary" href="#shop">Browse the catalogue</a><a class="btn" href="#" data-wa target="_blank" rel="noopener">Chat on WhatsApp</a></div></div>
-<div class="tiles" id="tiles" role="group" aria-label="Shop by category"></div>
 </div></section>
 <section class="promise" aria-label="How ordering works"><div class="wrap">
 <div><strong>Order on WhatsApp</strong>Tap order and your message is ready to send</div>
@@ -32,19 +31,30 @@
 <div><strong>No cash on delivery</strong>We confirm payment with you on WhatsApp</div>
 <div><strong>Unboxing video</strong>Needed for any damaged or wrong item</div>
 </div></section>
+<section class="feat wrap" id="feat" aria-roledescription="carousel" aria-labelledby="feath">
+<div class="fhead"><h2 id="feath">Featured picks</h2><div class="fctl"><button class="fbtn" type="button" id="fpause" aria-pressed="false">Pause</button><button class="fbtn" type="button" id="fprev" aria-label="Previous products">&#8249;</button><button class="fbtn" type="button" id="fnext" aria-label="Next products">&#8250;</button></div></div>
+<div class="ftrack" id="ftrack" aria-live="off"></div>
+</section>
 <section class="wrap shop" id="shop" aria-labelledby="shoph">
-<div class="shophead"><h2 id="shoph">Our catalogue</h2><p class="count" id="count" aria-live="polite">Loading catalogue…</p></div>
-<div class="types" id="types" role="group" aria-label="Filter by type"></div>
-<div class="filters" id="filters">
-<label class="sel"><span class="vh">Fabric</span><select id="fab"></select></label>
-<label class="sel"><span class="vh">Price</span><select id="price"><option value="">Any price</option><option value="0-999">Under ₹1,000</option><option value="1000-1499">₹1,000 to ₹1,499</option><option value="1500-1999">₹1,500 to ₹1,999</option><option value="2000-2999">₹2,000 to ₹2,999</option><option value="3000-">₹3,000 and above</option></select></label>
-<label class="chk"><input type="checkbox" id="stock"> In stock only</label>
-<button class="linkbtn" id="clr" type="button" hidden>Clear filters</button>
-<span class="grow"></span>
-<label class="sel"><span class="vh">Sort</span><select id="sort"><option value="featured">Sort: featured</option><option value="asc">Price: low to high</option><option value="desc">Price: high to low</option></select></label>
+<div class="shophead"><div><h2 id="shoph">Our catalogue</h2><p class="count" id="count" aria-live="polite">Loading catalogue…</p></div>
+<div class="shoptools"><button class="btn ftoggle" type="button" id="ftoggle" aria-expanded="false" aria-controls="fpanel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters<span class="fcount" id="fcount"></span></button><label class="sel"><span class="vh">Sort</span><select id="sort"><option value="featured">Sort: featured</option><option value="asc">Price: low to high</option><option value="desc">Price: high to low</option></select></label></div></div>
+<div class="shopbody">
+<aside class="fpanel" id="fpanel" aria-label="Filters">
+<div class="fptop"><h3>Filters</h3><button class="x" type="button" id="fclose" aria-label="Close filters">×</button></div>
+<div class="fpscroll">
+<fieldset class="fgrp" id="g-type"><legend>Type</legend><div class="opts" id="o-type"></div></fieldset>
+<fieldset class="fgrp" id="g-fab"><legend>Fabric</legend><div class="opts" id="o-fab"></div></fieldset>
+<fieldset class="fgrp"><legend>Price</legend><div class="opts" id="o-price"></div></fieldset>
+<fieldset class="fgrp"><legend>Availability</legend><div class="opts"><label class="fopt"><input type="checkbox" id="stock"><span>In stock only</span></label></div></fieldset>
 </div>
+<div class="fpbottom"><button class="linkbtn" type="button" id="clr">Clear all</button><button class="btn primary" type="button" id="fdone">Show results</button></div>
+</aside>
+<div class="results">
+<div class="active" id="active" aria-label="Selected filters"></div>
 <p class="note" id="note" hidden>Live prices could not be loaded, so this is a saved copy. Refresh the page to try again.</p>
 <div class="grid" id="grid" aria-label="Products"></div>
+</div>
+</div>
 </section>
 </main>
 <dialog id="dlg" aria-label="Product details"></dialog>
