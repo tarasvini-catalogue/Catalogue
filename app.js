@@ -1,14 +1,22 @@
 /* Tarasvini website script, shared by every page.
    SETTINGS: the only lines you normally need to change. */
-const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vRAUx8RFU39eLNHwEgoZk8TUAeABh63zQ-Y-Ti1Jan9-JxVMGeUfLNZJJGpBg5AWw/pub?output=csv"; // published CSV of the Website tab
+const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS9qQBcSytVNNAHcNGVlK4E-JdTrTEHP4oKuYvKhzIn24d9zHl_zm6iq6k9UlgLdw/pub?output=csv"; // published CSV of the Website tab
 const REVIEWS_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vRb2S-qjo-0bX-2i7J1DDT6V1v6I27PaHz97hULeNk8Gxv0POvyKnnCLhDEPCml8Q/pub?output=csv"; // published CSV of the Reviews sheet
 const WA="918925552441"; // WhatsApp number with country code, no +
 const BACKUP_CSV="catalogue-backup.csv"; // saved copy, used only if Google Sheets cannot be reached
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const state={all:[],cat:"Saree",fab:"All"};
-const CATS=[["Saree","Sarees"],["Kurti","Kurtis"],["Salwar","Salwars"],["Cord-set","Cord-sets"]];
-const label=()=>CATS.find(c=>c[0]===state.cat)[1];
+// Website tabs: [value in the sheet's Category column, tab label, one item, many items]
+const CATS=[["Saree","Sarees","saree","sarees"],["Salwar","Salwar Suits","salwar suit","salwar suits"],["Kurti","Kurtis & Gowns","style","styles"],["Lehenga","Lehengas","lehenga","lehengas"],["Cord-set","Cord-sets","cord-set","cord-sets"]];
+// Sheet headings the site understands (any capitals, spaces or dashes): heading -> internal name
+const ALIAS={product_code:"id",code:"id",model_no:"id",product_name:"name",sub_category:"collection",subcategory:"collection",type:"collection",fabric:"fabric_group",colours:"colours",colors:"colours",number_of_colours:"colours",selling_price:"price",availability:"available",photo_1:"image_url",photo_2:"image_url_2",photo_3:"image_url_3",video:"video_url"};
+const hkey=h=>{const k=String(h).trim().toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");return ALIAS[k]||k};
+const catKey=v=>{v=String(v||"").trim().toLowerCase();const c=CATS.find(c=>c[0].toLowerCase()===v||c[1].toLowerCase()===v||c[3]===v);return c?c[0]:String(v)};
+const CAT=()=>CATS.find(c=>c[0]===state.cat);
+const label=()=>CAT()[1];
+const many=n=>n+" "+(n===1?CAT()[2]:CAT()[3]);
+const cols=p=>p.colours>1?p.colours+" colours":"";
 const inCat=()=>state.all.filter(p=>p.category===state.cat);
 
 function parseCSV(t){
@@ -27,7 +35,7 @@ function parseCSV(t){
 const title=s=>s.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
 const inr=n=>"₹"+n.toLocaleString("en-IN");
 const waLink=p=>"https://wa.me/"+WA+"?text="+encodeURIComponent(
-  p?`Hi Tarasvini, I'd like to order:\n${p.name}\nCode: ${p.id}\nPrice: ${inr(p.price)}\nPlease confirm availability and delivery.`
+  p?`Hi Tarasvini, I'd like to order:\n${p.name}\nCode: ${p.id}\nPrice: ${inr(p.price)}${p.colours>1?"\nColour: ":""}${p.sizes?"\nSize: ":""}\nPlease confirm availability and delivery.`
    :"Hi Tarasvini, I'd like to know more about your products.");
 
 function hue(s){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))%360;return [16,30,48,78,95,110,24][h%7]}
@@ -41,12 +49,12 @@ const tags=p=>p.sold?'<span class="tag sold">Sold out</span>':p.feat?'<span clas
 
 const getImgs=o=>{const seen=[];Object.keys(o).filter(k=>/^image_url(_\d+)?$/.test(k)).sort((a,b)=>(parseInt(a.split("_")[2])||1)-(parseInt(b.split("_")[2])||1)).forEach(k=>String(o[k]||"").split(/[\s,|]+/).forEach(u=>{u=u.trim();if(u&&!seen.includes(u))seen.push(u)}));return seen.slice(0,8)};
 function load(){
-  fetch(CSV_URL).then(r=>{if(!r.ok)throw 0;return r.text()}).catch(()=>{$("#note").hidden=false;return fetch(BACKUP_CSV).then(r=>{if(!r.ok)throw 0;return r.text()})}).then(t=>{
-    const rows=parseCSV(t), head=rows[0].map(h=>h.trim().toLowerCase());
+  fetch(CSV_URL).then(r=>{if(!r.ok)throw 0;return r.text()}).then(t=>{const h=(parseCSV(t)[0]||[]).map(hkey);if(!h.includes("id")||!h.includes("name"))throw 0;return t}).catch(()=>{$("#note").hidden=false;return fetch(BACKUP_CSV).then(r=>{if(!r.ok)throw 0;return r.text()})}).then(t=>{
+    const rows=parseCSV(t), head=rows[0].map(hkey);
     state.all=rows.slice(1).map(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());return o})
-      .filter(o=>o.id&&o.name).map((o,i)=>({...o,i,
+      .filter(o=>o.id&&o.name&&!/^hid/i.test(o.available)).map((o,i)=>({...o,i,category:catKey(o.category),colours:parseInt(o.colours)||0,
         price:Number(String(o.price).replace(/[^\d.]/g,""))||0,
-        coll:o.collection?title(o.collection.replace(/\s+/g," ")):"",
+        coll:(c=>c===c.toLowerCase()?title(c):c)(String(o.collection||"").replace(/\s+/g," ").trim()),
         imgs:getImgs(o),sold:/^sold/i.test(o.available),feat:/^y/i.test(o.featured)}));
     init();
   }).catch(()=>{
@@ -61,7 +69,8 @@ function init(){
   const m=CATS.find(c=>c[0].toLowerCase()===(new URLSearchParams(location.search).get("cat")||"").toLowerCase()); if(m)state.cat=m[0];
   const qp=new URLSearchParams(location.search).get("q"); if(qp)$("#q").value=qp;
   const it=new URLSearchParams(location.search).get("item"),ip=it&&state.all.find(x=>x.id===it); if(ip&&CATS.some(c=>c[0]===ip.category))state.cat=ip.category;
-  $("#menu").innerHTML=CATS.map(([k,l])=>`<button class="tab" data-cat="${k}" aria-pressed="${state.cat===k}">${l}</button>`).join("");
+  if(!state.all.some(p=>p.category===state.cat)){const f=CATS.find(c=>state.all.some(p=>p.category===c[0]));if(f)state.cat=f[0]}
+  $("#menu").innerHTML=CATS.filter(c=>c[0]===state.cat||state.all.some(p=>p.category===c[0])).map(([k,l])=>`<button class="tab" data-cat="${k}" aria-pressed="${state.cat===k}">${l}</button>`).join("");
   buildFilters();
   if(ip)openDlg(ip.id);
 }
@@ -73,7 +82,7 @@ function buildFilters(){
   const box=$("#chips"); box.innerHTML="";
   if(fabs.length>1) chips(box,"fab",["All",...fabs]);
   box.parentElement.hidden=fabs.length<2;
-  $("#coll").innerHTML='<option value="">All collections</option>'+colls.map(c=>`<option>${esc(c)}</option>`).join("");
+  $("#coll").innerHTML='<option value="">All types</option>'+colls.map(c=>`<option>${esc(c)}</option>`).join("");
   $("#coll").parentElement.hidden=!colls.length;
   renderColl();
   render();
@@ -88,15 +97,15 @@ function render(){
   let list=state.all.filter(p=>
     p.category===state.cat&&(state.fab==="All"||p.fabric_group===state.fab)&&
     (!coll||p.coll===coll)&&(!stock||!p.sold)&&(!lo||p.price>=lo)&&(!hi||p.price<=hi)&&
-    (!q||(p.name+" "+p.id+" "+p.coll).toLowerCase().includes(q)));
+    (!q||(p.name+" "+p.id+" "+p.coll+" "+p.fabric_group).toLowerCase().includes(q)));
   list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(b.feat-a.feat)||(a.i-b.i));
-  $("#count").textContent=list.length+" "+(list.length===1?label().replace(/s$/,""):label()).toLowerCase();
+  $("#count").textContent=many(list.length);
   $("#grid").innerHTML=list.length?list.map(p=>`
     <article class="card">
       <button class="open" data-id="${esc(p.id)}" aria-label="View ${esc(p.name)}">
         ${ph(p)}
         <div class="info"><h3>${esc(p.name)}</h3>
-          <div class="meta">${esc(p.coll)}${p.delivery?" · Delivery "+esc(p.delivery):""}</div>
+          <div class="meta">${[esc(p.coll),cols(p)].filter(Boolean).join(" · ")}</div>
           <div class="price">${p.price?inr(p.price):""}</div></div>
       </button>
       ${acts(p)}
@@ -116,10 +125,11 @@ function openDlg(id){
     ${imgs.length>1?`<button class="gnav gprev" type="button" aria-label="Previous photo">&#8249;</button><button class="gnav gnext" type="button" aria-label="Next photo">&#8250;</button><div class="thumbs">${imgs.map((u,i)=>`<button type="button" data-i="${i}" aria-label="Photo ${i+1}"><img src="${esc(u)}" alt=""></button>`).join("")}</div>`:""}</div>
   <div class="body"><h2>${esc(p.name)}</h2><div class="price">${p.price?inr(p.price):""}</div>
     <dl><dt>Code</dt><dd>${esc(p.id)}</dd>
-    ${p.coll?`<dt>Collection</dt><dd>${esc(p.coll)}</dd>`:""}
+    ${p.coll?`<dt>Type</dt><dd>${esc(p.coll)}</dd>`:""}
     ${p.fabric_group?`<dt>Fabric</dt><dd>${esc(p.fabric_group)}</dd>`:""}
+    ${p.colours>1?`<dt>Colours</dt><dd>Available in ${p.colours} colours. Tell us which one when you order.</dd>`:""}
     ${p.sizes?`<dt>Sizes</dt><dd>${esc(p.sizes)}</dd>`:""}
-    ${p.delivery?`<dt>Delivery</dt><dd>${esc(p.delivery)}</dd>`:""}</dl>
+    ${p.delivery?`<dt>Delivery</dt><dd>${esc(p.delivery)} (working days)</dd>`:""}</dl>
     ${p.description?`<p>${esc(p.description)}</p>`:""}${vid}
     <div style="margin-top:16px">${acts(p)}</div>
   </div></div>`;
@@ -235,7 +245,7 @@ function share(d){
 document.addEventListener("click",e=>{
   const s=e.target.closest("[data-share]");
   if(s){const p=state.all.find(x=>x.id===s.dataset.share);if(p)share({title:p.name+" | Tarasvini",text:p.name+(p.price?" for "+inr(p.price):"")+" at Tarasvini",url:location.origin+location.pathname+"?item="+encodeURIComponent(p.id)});return}
-  if(e.target.closest("[data-sharesite]"))share({title:"Tarasvini",text:"Sarees, kurtis, salwars and cord-sets at Tarasvini",url:location.origin+location.pathname.replace(/[^/]*$/,"")});
+  if(e.target.closest("[data-sharesite]"))share({title:"Tarasvini",text:"Sarees, salwar suits, kurtis, gowns and lehengas at Tarasvini",url:location.origin+location.pathname.replace(/[^/]*$/,"")});
 });
 
 function renderColl(){
@@ -247,12 +257,12 @@ function renderColl(){
   const list=Object.values(g);
   sec.hidden=!list.length;
   if(!list.length){tr.innerHTML="";return}
-  $("#collh").textContent="Shop "+label().toLowerCase()+" by collection";
+  $("#collh").textContent="Shop "+label().toLowerCase()+" by type";
   for(let i=list.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[list[i],list[j]]=[list[j],list[i]]}
   tr.innerHTML=list.map(c=>{
     const prices=c.items.map(p=>p.price).filter(Boolean),n=c.items.length;
     const th=c.items.slice().sort(()=>Math.random()-.5).slice(0,3).map(p=>`<i style="background:linear-gradient(160deg,hsl(${hue(p.id)} 40% 84%),hsl(${(hue(p.id)+18)%360} 36% 72%))">${p.imgs[0]?`<img src="${esc(p.imgs[0])}" alt="" loading="lazy" onerror="this.remove()">`:""}</i>`).join("")+'<i class="blank"></i>'.repeat(Math.max(0,3-n));
-    return `<button class="cslide" type="button" data-cat="${esc(state.cat)}" data-coll="${esc(c.coll)}" aria-label="${esc(c.coll)}, ${n} ${n===1?"style":"styles"}"><span class="cthumbs">${th}</span><span class="cname">${esc(c.coll)}</span><span class="cmeta">${n} ${n===1?"style":"styles"}${prices.length?", from "+inr(Math.min(...prices)):""}</span></button>`}).join("");
+    return `<button class="cslide" type="button" data-cat="${esc(state.cat)}" data-coll="${esc(c.coll)}" aria-label="${esc(c.coll)}, ${many(n)}"><span class="cthumbs">${th}</span><span class="cname">${esc(c.coll)}</span><span class="cmeta">${many(n)}${prices.length?", from "+inr(Math.min(...prices)):""}</span></button>`}).join("");
   tr.scrollLeft=0;
   if(sec._ready)return;
   sec._ready=true;
