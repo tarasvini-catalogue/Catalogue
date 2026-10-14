@@ -346,7 +346,8 @@ if($("#grid")){
 
 // ---- Offer banner: rows from the Offers tab with Show = Yes and today between Start and End ----
 function pdate(v,end){v=String(v||"").trim();if(!v)return null;let m,d;
-  if(m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))d=new Date(+m[1],m[2]-1,+m[3]);
+  if(/^\d{5}(\.\d+)?$/.test(v)){const t=new Date(1899,11,30);t.setDate(t.getDate()+Math.floor(+v));d=t}  // spreadsheet day number, e.g. 46310 = 15 Oct 2026
+  else if(m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))d=new Date(+m[1],m[2]-1,+m[3]);
   else if(m=v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/)){let dd=+m[1],mm=+m[2];if(mm>12&&dd<=12)[dd,mm]=[mm,dd];d=new Date(+(m[3].length==2?"20"+m[3]:m[3]),mm-1,dd)}
   else{const t=Date.parse(v);if(isNaN(t))return null;d=new Date(t)}
   if(end)d.setHours(23,59,59,999);return d}
