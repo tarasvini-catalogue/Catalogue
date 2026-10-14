@@ -86,7 +86,6 @@ function init(){
   if(qs.get("q")){$("#q").value=qs.get("q");if(!m){const best=present().map(c=>[c[0],state.all.filter(p=>p.category===c[0]&&hit(p,qs.get("q").toLowerCase())).length]).sort((a,b)=>b[1]-a[1])[0];if(best&&best[1])state.cat=best[0]}}
   const it=qs.get("item"),ip=it&&state.all.find(x=>x.id===it); if(ip)state.cat=ip.category;
   if(!state.all.some(p=>p.category===state.cat)&&present().length)state.cat=present()[0][0];
-  buildFeatured();
   // hide nav links for empty categories
   document.querySelectorAll(".nav a[data-cat]").forEach(a=>a.hidden=!state.all.some(p=>p.category===a.dataset.cat));
   setCat(state.cat,false);
@@ -96,14 +95,12 @@ function init(){
 // Featured carousel: products marked Featured = yes; topped up with a mix from each category
 function buildFeatured(){
   const tr=$("#ftrack"); if(!tr)return;
-  let list=state.all.filter(p=>p.feat&&!p.sold);
-  if(list.length<6)list=list.concat(state.all.filter(p=>p.isnew&&!p.feat&&!p.sold)).slice(0,12);
-  if(list.length<6){
-    const pools=present().map(c=>state.all.filter(p=>p.category===c[0]&&!p.sold&&!p.feat&&!p.isnew));
-    for(let i=0;list.length<9&&pools.some(x=>x[i]);i++)pools.forEach(x=>{if(x[i]&&list.length<9)list.push(x[i])});
-  }
+  // Selected category only: Featured products first, then New Arrivals
+  const its=inCat().filter(p=>!p.sold);
+  const list=its.filter(p=>p.feat).concat(its.filter(p=>p.isnew&&!p.feat));
   $("#feat").hidden=!list.length;
-  tr.innerHTML=list.map(cardHTML).join("");
+  $("#feath").textContent=list.some(p=>p.feat)?"Featured "+label().toLowerCase():"New "+label().toLowerCase();
+  tr.innerHTML=list.map(cardHTML).join("");tr.scrollLeft=0;
   if(tr._ready)return;tr._ready=true;
   const step=()=>{const c=tr.querySelector(".card");return c?c.offsetWidth+parseFloat(getComputedStyle(tr).columnGap||0):300};
   const smooth=()=>matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth";
@@ -142,6 +139,7 @@ function optList(box,key,counts,expanded){
     (expanded&&keys.length>SHOW+2?`<button class="more" type="button" data-less="${key}">Show fewer</button>`:"");
 }
 function buildFilters(){
+  buildFeatured();
   const items=inCat(), tc={}, fc={};
   $("#shoph").textContent=label();
   items.forEach(p=>{if(p.coll)tc[p.coll]=(tc[p.coll]||0)+1;if(p.fabric_group)fc[p.fabric_group]=(fc[p.fabric_group]||0)+1});
@@ -155,7 +153,9 @@ function buildFilters(){
 }
 const hit=(p,q)=>(p.name+" "+p.id+" "+p.coll+" "+p.fabric_group).toLowerCase().includes(q);
 function priceOK(p){if(!sel.price)return true;const [a,b]=sel.price.split("-");return p.price>=(+a||0)&&(!b||p.price<=+b)}
-function render(){
+const FIRST=20, MORE=10;
+function render(keep){
+  if(!keep)state.shown=FIRST;
   if(!inCat().length){
     $("#count").textContent="Coming soon";$("#active").innerHTML="";
     $("#grid").innerHTML=`<div class="empty"><p>We are adding ${label().toLowerCase()} to the catalogue. Ask us on WhatsApp what is available now.</p><a class="btn wa" href="https://wa.me/${WA}?text=${encodeURIComponent("Hi Tarasvini, do you have "+label().toLowerCase()+" available?")}" target="_blank" rel="noopener">${IC.wa}Ask on WhatsApp</a></div>`;
@@ -176,7 +176,10 @@ function render(){
   $("#fcount").textContent=n||"";
   $("#fdone").textContent=list.length?`Show ${many(list.length)}`:"No matches";
   $("#count").textContent=q?`${many(list.length)} matching “${qv}”`:many(list.length);
-  $("#grid").innerHTML=list.length?list.map(cardHTML).join(""):`<div class="empty"><p>No ${CAT()[3]} match ${q?"“"+esc(qv)+"”":"these filters"}.</p>${q?present().filter(c=>c[0]!==state.cat).map(c=>[c,state.all.filter(p=>p.category===c[0]&&hit(p,q)).length]).filter(x=>x[1]).map(([c,n])=>`<button class="btn" type="button" data-cat="${c[0]}">See ${n} in ${esc(c[1])}</button> `).join(""):""}<button class="btn" type="button" onclick="clearFilters()">Clear filters</button></div>`;
+  state.list=list;
+  const left=Math.max(0,list.length-state.shown);
+  $("#more").hidden=!left;$("#more").textContent=`Show ${Math.min(MORE,left)} more (${left} left)`;
+  $("#grid").innerHTML=list.length?list.slice(0,state.shown).map(cardHTML).join(""):`<div class="empty"><p>No ${CAT()[3]} match ${q?"“"+esc(qv)+"”":"these filters"}.</p>${q?present().filter(c=>c[0]!==state.cat).map(c=>[c,state.all.filter(p=>p.category===c[0]&&hit(p,q)).length]).filter(x=>x[1]).map(([c,n])=>`<button class="btn" type="button" data-cat="${c[0]}">See ${n} in ${esc(c[1])}</button> `).join(""):""}<button class="btn" type="button" onclick="clearFilters()">Clear filters</button></div>`;
 }
 function syncPanel(){document.querySelectorAll("#fpanel [data-f]").forEach(i=>i.checked=sel[i.dataset.f].has(i.value));document.querySelectorAll("#fpanel [name=price]").forEach(i=>i.checked=i.value===sel.price)}
 function openPanel(o){const f=$("#fpanel");f.classList.toggle("is-open",o);$("#ftoggle").setAttribute("aria-expanded",o);document.body.style.overflow=o?"hidden":"";if(o)$("#fclose").focus();else $("#ftoggle").focus()}
@@ -329,12 +332,13 @@ document.addEventListener("click",e=>{
 });
 
 if($("#grid")){
-  $("#sort").addEventListener("change",render);
-  $("#q").addEventListener("input",render);
+  $("#sort").addEventListener("change",()=>render());
+  $("#q").addEventListener("input",()=>render());
   $("#fpanel").addEventListener("change",e=>{const t=e.target;
     if(t.dataset.f){sel[t.dataset.f][t.checked?"add":"delete"](t.value)}else if(t.name==="price")sel.price=t.value;
     render()});
   $("#clr").onclick=clearFilters;
+  $("#more").onclick=()=>{const n=state.shown;state.shown+=MORE;render(true);const c=$("#grid").children[n];if(c){const l=c.querySelector("a,button");if(l)l.focus({preventScroll:true})}};
   $("#ftoggle").onclick=()=>openPanel(true);$("#fclose").onclick=()=>openPanel(false);
   $("#fdone").onclick=()=>{openPanel(false);document.getElementById("shop").scrollIntoView()};
   addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#fpanel").classList.contains("is-open"))openPanel(false)});
@@ -355,6 +359,8 @@ const OCOL={red:"#B43C18",sindoor:"#B43C18",pink:"#B0185A",rani:"#B0185A",magent
 function offerLink(o){const l=String(o.button_link||"").trim(),k=l.toLowerCase();
   if(!l)return o.button_text?["index.html#shop",false]:null;
   if(/^https?:\/\//i.test(l))return[l,true];
+  if(/^(insta|instagram|instagram dm|insta dm|dm)$/.test(k))return[IG_DM,true];
+  if(/^instagram (page|profile)$/.test(k))return["https://www.instagram.com/tarasvini/",true];
   if(/whats\s*app/.test(k))return["https://wa.me/"+WA+"?text="+encodeURIComponent("Hi Tarasvini, I'd like to know more about your offer: "+o.headline),true];
   const c=CATS.find(c=>[c[0],c[1],c[2],c[3]].some(x=>x.toLowerCase()===k)||c[0].toLowerCase()+"s"===k);
   if(c)return["index.html?cat="+encodeURIComponent(c[0]),false];

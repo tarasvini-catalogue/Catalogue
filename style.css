@@ -321,3 +321,5 @@ footer p{margin:0 0 8px;font-size:14px;max-width:34ch}
 .was{font:400 14px var(--sans);color:var(--ink-2);text-decoration:line-through;margin-left:6px}
 .off{font:600 13px var(--sans);color:var(--rani);margin-left:6px}
 .tag.sale{background:var(--rani);color:#fff}
+.morewrap{display:flex;justify-content:center;margin-top:36px}
+.morewrap .btn{min-width:240px}
