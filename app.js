@@ -4,7 +4,7 @@
 // open the tab and read it from the address bar, e.g. ...edit#gid=123456789
 const SHEET_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS9qQBcSytVNNAHcNGVlK4E-JdTrTEHP4oKuYvKhzIn24d9zHl_zm6iq6k9UlgLdw/pub";
 // gids of the Catalogue and Offers tabs, in any order: the site tells them apart by their column headings
-const SHEET_TABS=["951620432","818691743"];
+const SHEET_TABS=["765422921","58829998","951620432","818691743"]; // Catalogue, Offers (+ earlier numbers as fallback)
 const tabURL=g=>SHEET_URL+(g?"?gid="+g+"&single=true&output=csv":"?output=csv");
 const REVIEWS_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vRb2S-qjo-0bX-2i7J1DDT6V1v6I27PaHz97hULeNk8Gxv0POvyKnnCLhDEPCml8Q/pub?output=csv"; // published CSV of the Reviews sheet
 const WA="918925552441"; // WhatsApp number with country code, no +
