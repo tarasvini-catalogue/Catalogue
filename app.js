@@ -1,6 +1,11 @@
 /* Tarasvini website script, shared by every page.
    SETTINGS: the only lines you normally need to change. */
-const CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS9qQBcSytVNNAHcNGVlK4E-JdTrTEHP4oKuYvKhzIn24d9zHl_zm6iq6k9UlgLdw/pub?output=csv"; // published CSV of the Website tab
+// Published Google Sheet (File > Share > Publish to web). Each tab has a gid number:
+// open the tab and read it from the address bar, e.g. ...edit#gid=123456789
+const SHEET_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS9qQBcSytVNNAHcNGVlK4E-JdTrTEHP4oKuYvKhzIn24d9zHl_zm6iq6k9UlgLdw/pub";
+// gids of the Catalogue and Offers tabs, in any order: the site tells them apart by their column headings
+const SHEET_TABS=["951620432","818691743"];
+const tabURL=g=>SHEET_URL+(g?"?gid="+g+"&single=true&output=csv":"?output=csv");
 const REVIEWS_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vRb2S-qjo-0bX-2i7J1DDT6V1v6I27PaHz97hULeNk8Gxv0POvyKnnCLhDEPCml8Q/pub?output=csv"; // published CSV of the Reviews sheet
 const WA="918925552441"; // WhatsApp number with country code, no +
 const BACKUP_CSV="catalogue-backup.csv"; // saved copy, used only if Google Sheets cannot be reached
@@ -10,7 +15,7 @@ const state={all:[],cat:"Saree",tc:{},fc:{}};
 // Website tabs: [value in the sheet's Category column, tab label, one item, many items]
 const CATS=[["Saree","Sarees","saree","sarees"],["Salwar","Salwar Suits","salwar suit","salwar suits"],["Kurti","Kurtis & Gowns","style","styles"],["Lehenga","Lehengas","lehenga","lehengas"],["Cord-set","Cord-sets","cord-set","cord-sets"]];
 // Sheet headings the site understands (any capitals, spaces or dashes): heading -> internal name
-const ALIAS={product_code:"id",code:"id",model_no:"id",product_name:"name",sub_category:"collection",subcategory:"collection",type:"collection",fabric:"fabric_group",colours:"colours",colors:"colours",number_of_colours:"colours",selling_price:"price",availability:"available",photo_1:"image_url",photo_2:"image_url_2",photo_3:"image_url_3",video:"video_url"};
+const ALIAS={sale_price:"sale",offer_price:"sale",discount_price:"sale",show_on_website:"show",show_on_site:"show",show:"show",on_website:"show",website:"show",new_arrival:"isnew",new_arrivals:"isnew",new:"isnew",product_code:"id",code:"id",model_no:"id",product_name:"name",sub_category:"collection",subcategory:"collection",type:"collection",fabric:"fabric_group",colours:"colours",colors:"colours",number_of_colours:"colours",selling_price:"price",availability:"available",photo_1:"image_url",photo_2:"image_url_2",photo_3:"image_url_3",video:"video_url"};
 const hkey=h=>{const k=String(h).trim().toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");return ALIAS[k]||k};
 const catKey=v=>{v=String(v||"").trim().toLowerCase();const c=CATS.find(c=>c[0].toLowerCase()===v||c[1].toLowerCase()===v||c[3]===v);return c?c[0]:String(v)};
 const CAT=()=>CATS.find(c=>c[0]===state.cat);
@@ -32,10 +37,14 @@ function parseCSV(t){
   if(f!==""||r.length){r.push(f);rows.push(r)}
   return rows;
 }
+// Fetch each published tab once; pick the one whose headings pass the test
+let _tabs;
+const tabs=()=>_tabs||(_tabs=Promise.all(SHEET_TABS.map(g=>fetch(tabURL(g)).then(r=>r.ok?r.text():"").catch(()=>""))));
+const findTab=test=>tabs().then(ts=>ts.find(t=>t&&test((parseCSV(t)[0]||[]).map(hkey)))||"");
 const title=s=>s.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
 const inr=n=>"₹"+n.toLocaleString("en-IN");
 const waLink=p=>"https://wa.me/"+WA+"?text="+encodeURIComponent(
-  p?`Hi Tarasvini, I'd like to order:\n${p.name}\nCode: ${p.id}\nPrice: ${inr(p.price)}${p.colours>1?"\nColour: ":""}${p.sizes?"\nSize: ":""}\nPlease confirm availability and delivery.`
+  p?`Hi Tarasvini, I'd like to order:\n${p.name}\nCode: ${p.id}\nPrice: ${inr(p.price)}${p.was?" (sale price, was "+inr(p.was)+")":""}${p.colours>1?"\nColour: ":""}${p.sizes?"\nSize: ":""}\nPlease confirm availability and delivery.`
    :"Hi Tarasvini, I'd like to know more about your products.");
 
 // Category colours: [strong, light tint]; used for photo placeholders
@@ -46,19 +55,24 @@ function ph(p,big,imgIdx=0){
   const img=imgs[imgIdx]?`<img src="${esc(imgs[imgIdx])}" alt="${esc(p.name)}" loading="${big?"eager":"lazy"}" onerror="this.remove()">`:"";
   return `<div class="ph" style="--c:${c};--t:${t}"><b>${esc(p.id)}</b><span>Photo coming soon</span>${img}${tags(p)}${!big&&imgs.length>1?`<span class="cnt">${imgs.length} photos</span>`:""}<div class="zari" aria-hidden="true"></div></div>`;
 }
-const tags=p=>p.sold?'<span class="tag sold">Sold out</span>':p.feat?'<span class="tag feat">Featured</span>':"";
+const num=v=>Number(String(v||"").replace(/[^\d.]/g,""))||0;
+const priceHTML=p=>p.price?inr(p.price)+(p.was?`<s class="was">${inr(p.was)}</s><span class="off">${Math.round((1-p.price/p.was)*100)}% off</span>`:""):"";
+const yes=v=>/^(y|yes|true|1|✓|✔|x)$/i.test(String(v||"").trim());
+const tags=p=>{const t=p.sold?['<span class="tag sold">Sold out</span>']:[p.isnew?'<span class="tag new">New arrival</span>':"",p.onsale?'<span class="tag sale">Sale</span>':"",p.feat?'<span class="tag feat">Featured</span>':""].filter(Boolean);return t.length?`<span class="tags">${t.join("")}</span>`:""};
 
 // Google Drive share links -> direct image links (the file must be shared "Anyone with the link")
 const imgURL=u=>{const m=u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]{20,})/)||u.match(/docs\.google\.com\/uc\?(?:export=\w+&)?id=([\w-]{20,})/);return m?"https://lh3.googleusercontent.com/d/"+m[1]+"=w1200":u};
 const getImgs=o=>{const seen=[];Object.keys(o).filter(k=>/^image_url(_\d+)?$/.test(k)).sort((a,b)=>(parseInt(a.split("_")[2])||1)-(parseInt(b.split("_")[2])||1)).forEach(k=>String(o[k]||"").split(/[\s,|]+/).forEach(u=>{u=imgURL(u.trim());if(u&&!seen.includes(u))seen.push(u)}));return seen.slice(0,8)};
 function load(){
-  fetch(CSV_URL).then(r=>{if(!r.ok)throw 0;return r.text()}).then(t=>{const h=(parseCSV(t)[0]||[]).map(hkey);if(!h.includes("id")||!h.includes("name"))throw 0;return t}).catch(()=>{$("#note").hidden=false;return fetch(BACKUP_CSV).then(r=>{if(!r.ok)throw 0;return r.text()})}).then(t=>{
+  findTab(h=>h.includes("id")&&h.includes("name")).then(t=>{if(!t)throw 0;return t}).catch(()=>{$("#note").hidden=false;return fetch(BACKUP_CSV).then(r=>{if(!r.ok)throw 0;return r.text()})}).then(t=>{
     const rows=parseCSV(t), head=rows[0].map(hkey);
-    state.all=rows.slice(1).map(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());return o})
-      .filter(o=>o.id&&o.name&&!/^hid/i.test(o.available)).map((o,i)=>({...o,i,category:catKey(o.category),colours:parseInt(o.colours)||0,
-        price:Number(String(o.price).replace(/[^\d.]/g,""))||0,
+    let recs=rows.slice(1).map(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());return o}).filter(o=>o.id&&o.name&&!/^hid/i.test(o.available));
+    // "Show on Website": only ticked rows appear. If the column is missing or nothing is ticked yet, everything shows.
+    if(head.includes("show")&&recs.some(o=>yes(o.show)))recs=recs.filter(o=>yes(o.show));
+    state.all=recs.map((o,i)=>({...o,i,category:catKey(o.category),colours:parseInt(o.colours)||0,
+        ...(()=>{const mrp=num(o.price),sp=num(o.sale);return sp>0&&sp<mrp?{price:sp,was:mrp,onsale:true}:{price:mrp,was:0,onsale:false}})(),
         coll:(c=>c===c.toLowerCase()?title(c):c)(String(o.collection||"").replace(/\s+/g," ").trim()),
-        imgs:getImgs(o),sold:/^sold/i.test(o.available),feat:/^y/i.test(o.featured)}));
+        imgs:getImgs(o),sold:/^sold/i.test(o.available),feat:yes(o.featured),isnew:yes(o.isnew)}));
     init();
   }).catch(()=>{
     $("#count").innerHTML='The catalogue did not load. <button class="linkbtn" onclick="location.reload()">Try again</button>';
@@ -83,8 +97,9 @@ function init(){
 function buildFeatured(){
   const tr=$("#ftrack"); if(!tr)return;
   let list=state.all.filter(p=>p.feat&&!p.sold);
+  if(list.length<6)list=list.concat(state.all.filter(p=>p.isnew&&!p.feat&&!p.sold)).slice(0,12);
   if(list.length<6){
-    const pools=present().map(c=>state.all.filter(p=>p.category===c[0]&&!p.sold&&!p.feat));
+    const pools=present().map(c=>state.all.filter(p=>p.category===c[0]&&!p.sold&&!p.feat&&!p.isnew));
     for(let i=0;list.length<9&&pools.some(x=>x[i]);i++)pools.forEach(x=>{if(x[i]&&list.length<9)list.push(x[i])});
   }
   $("#feat").hidden=!list.length;
@@ -117,7 +132,7 @@ function setCat(k,scroll){
 // Filter panel: tick-boxes for type and fabric, one price band, in-stock
 const PRICES=[["","Any price"],["0-999","Under ₹1,000"],["1000-1499","₹1,000 to ₹1,499"],["1500-1999","₹1,500 to ₹1,999"],["2000-2999","₹2,000 to ₹2,999"],["3000-","₹3,000 and above"]];
 const sel={type:new Set(),fab:new Set(),price:""};
-function resetSel(){sel.type.clear();sel.fab.clear();sel.price="";const s=$("#stock");if(s)s.checked=false}
+function resetSel(){sel.type.clear();sel.fab.clear();sel.price="";["#stock","#newonly","#saleonly"].forEach(x=>{const s=$(x);if(s)s.checked=false})}
 const SHOW=8;
 function optList(box,key,counts,expanded){
   const keys=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]||a.localeCompare(b));
@@ -133,6 +148,8 @@ function buildFilters(){
   state.tc=tc;state.fc=fc;
   optList($("#o-type"),"type",tc,false);$("#g-type").hidden=Object.keys(tc).length<2;
   optList($("#o-fab"),"fab",fc,false);$("#g-fab").hidden=Object.keys(fc).length<2;
+  const nn=items.filter(p=>p.isnew).length;$("#newopt").hidden=!nn;$("#newn").textContent=nn||"";
+  const ns=items.filter(p=>p.onsale).length;$("#saleopt").hidden=!ns;$("#salen").textContent=ns||"";
   $("#o-price").innerHTML=PRICES.map(([v,l])=>`<label class="fopt"><input type="radio" name="price" value="${v}"${sel.price===v?" checked":""}><span>${l}</span></label>`).join("");
   render();
 }
@@ -144,16 +161,18 @@ function render(){
     $("#grid").innerHTML=`<div class="empty"><p>We are adding ${label().toLowerCase()} to the catalogue. Ask us on WhatsApp what is available now.</p><a class="btn wa" href="https://wa.me/${WA}?text=${encodeURIComponent("Hi Tarasvini, do you have "+label().toLowerCase()+" available?")}" target="_blank" rel="noopener">${IC.wa}Ask on WhatsApp</a></div>`;
     return;
   }
-  const qv=$("#q").value.trim(), q=qv.toLowerCase(), stock=$("#stock").checked, sort=$("#sort").value;
-  let list=state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!stock||!p.sold)&&priceOK(p)&&(!q||hit(p,q)));
-  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(b.feat-a.feat)||(a.sold-b.sold)||(a.i-b.i));
+  const qv=$("#q").value.trim(), q=qv.toLowerCase(), stock=$("#stock").checked, nw=$("#newonly").checked, so=$("#saleonly").checked, sort=$("#sort").value;
+  let list=state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)&&(!q||hit(p,q)));
+  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(b.feat-a.feat)||(b.isnew-a.isnew)||(a.sold-b.sold)||(a.i-b.i));
   // chips for what is selected
   const chips=[...[...sel.type].map(v=>["type",v,v]),...[...sel.fab].map(v=>["fab",v,v])];
   if(sel.price)chips.push(["price","",PRICES.find(x=>x[0]===sel.price)[1]]);
+  if(nw)chips.push(["newonly","","New arrivals"]);
+  if(so)chips.push(["saleonly","","On sale"]);
   if(stock)chips.push(["stock","","In stock only"]);
   if(q)chips.push(["q","",`Search: “${qv}”`]);
   $("#active").innerHTML=chips.length?chips.map(([k,v,l])=>`<button class="achip" type="button" data-rm="${k}" data-v="${esc(v)}" aria-label="Remove ${esc(l)}">${esc(l)}<b aria-hidden="true">×</b></button>`).join("")+'<button class="linkbtn" type="button" onclick="clearFilters()">Clear all</button>':"";
-  const n=sel.type.size+sel.fab.size+(sel.price?1:0)+(stock?1:0);
+  const n=sel.type.size+sel.fab.size+(sel.price?1:0)+(stock?1:0)+(nw?1:0)+(so?1:0);
   $("#fcount").textContent=n||"";
   $("#fdone").textContent=list.length?`Show ${many(list.length)}`:"No matches";
   $("#count").textContent=q?`${many(list.length)} matching “${qv}”`:many(list.length);
@@ -166,7 +185,7 @@ const cardHTML=p=>`
       <button class="open" type="button" data-id="${esc(p.id)}" aria-label="${esc(p.name)}, ${p.price?inr(p.price):""}">
         ${ph(p)}
         <div class="info">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<h3>${esc(p.name)}</h3>
-          <div class="prow"><span class="price">${p.price?inr(p.price):""}</span>${cols(p)?`<span class="cols">${cols(p)}</span>`:""}</div></div>
+          <div class="prow"><span class="price">${priceHTML(p)}</span>${cols(p)?`<span class="cols">${cols(p)}</span>`:""}</div></div>
       </button>
       ${p.sold?'<button class="btn order" type="button" disabled>Sold out</button>':`<a class="btn order" href="${waLink(p)}" target="_blank" rel="noopener">${IC.wa}Order on WhatsApp</a>`}
     </article>`;
@@ -183,7 +202,7 @@ function openDlg(id){
   d.innerHTML=`<button class="x" type="button" aria-label="Close" onclick="this.closest('dialog').close()">×</button>
   <div class="dg"><div class="gal">${ph(p,true,0)}
     ${imgs.length>1?`<button class="gnav gprev" type="button" aria-label="Previous photo">&#8249;</button><button class="gnav gnext" type="button" aria-label="Next photo">&#8250;</button><div class="thumbs">${imgs.map((u,i)=>`<button type="button" data-i="${i}" aria-label="Photo ${i+1}"><img src="${esc(u)}" alt=""></button>`).join("")}</div>`:""}</div>
-  <div class="body">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<h2>${esc(p.name)}</h2><div class="price">${p.price?inr(p.price):""}</div>
+  <div class="body">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<h2>${esc(p.name)}</h2><div class="price">${priceHTML(p)}</div>
     ${sizes.length?`<div class="opt"><h4>Sizes</h4><div class="sizes">${sizes.map(s=>`<span>${esc(s)}</span>`).join("")}</div></div>`:""}
     ${p.colours>1?`<div class="opt"><h4>Colours</h4><p>Available in ${p.colours} colours. Tell us your colour when you order.</p></div>`:""}
     ${p.description?`<p class="desc">${esc(p.description)}</p>`:""}
@@ -214,7 +233,7 @@ function openDlg(id){
 document.addEventListener("click",e=>{
   if(!$("#grid"))return;
   const rm=e.target.closest("[data-rm]");
-  if(rm){const k=rm.dataset.rm,v=rm.dataset.v;if(k==="type"||k==="fab")sel[k].delete(v);else if(k==="price")sel.price="";else if(k==="stock")$("#stock").checked=false;else if(k==="q")$("#q").value="";
+  if(rm){const k=rm.dataset.rm,v=rm.dataset.v;if(k==="type"||k==="fab")sel[k].delete(v);else if(k==="price")sel.price="";else if(k==="stock")$("#stock").checked=false;else if(k==="newonly")$("#newonly").checked=false;else if(k==="saleonly")$("#saleonly").checked=false;else if(k==="q")$("#q").value="";
     syncPanel();render();return}
   const mo=e.target.closest("[data-more],[data-less]");
   if(mo){const k=mo.dataset.more||mo.dataset.less;optList($(k==="type"?"#o-type":"#o-fab"),k,k==="type"?state.tc:state.fc,!!mo.dataset.more);return}
@@ -324,3 +343,45 @@ if($("#grid")){
   setH();addEventListener("resize",setH);
   load();
 }
+
+// ---- Offer banner: rows from the Offers tab with Show = Yes and today between Start and End ----
+function pdate(v,end){v=String(v||"").trim();if(!v)return null;let m,d;
+  if(m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))d=new Date(+m[1],m[2]-1,+m[3]);
+  else if(m=v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/)){let dd=+m[1],mm=+m[2];if(mm>12&&dd<=12)[dd,mm]=[mm,dd];d=new Date(+(m[3].length==2?"20"+m[3]:m[3]),mm-1,dd)}
+  else{const t=Date.parse(v);if(isNaN(t))return null;d=new Date(t)}
+  if(end)d.setHours(23,59,59,999);return d}
+const OCOL={red:"#B43C18",sindoor:"#B43C18",pink:"#B0185A",rani:"#B0185A",magenta:"#B0185A",teal:"#0F6B6B",green:"#0F6B6B",peacock:"#0F6B6B",gold:"#9A6200",yellow:"#9A6200",marigold:"#9A6200",brown:"#24180C",dark:"#24180C",black:"#24180C"};
+function offerLink(o){const l=String(o.button_link||"").trim(),k=l.toLowerCase();
+  if(!l)return o.button_text?["index.html#shop",false]:null;
+  if(/^https?:\/\//i.test(l))return[l,true];
+  if(/whats\s*app/.test(k))return["https://wa.me/"+WA+"?text="+encodeURIComponent("Hi Tarasvini, I'd like to know more about your offer: "+o.headline),true];
+  const c=CATS.find(c=>[c[0],c[1],c[2],c[3]].some(x=>x.toLowerCase()===k)||c[0].toLowerCase()+"s"===k);
+  if(c)return["index.html?cat="+encodeURIComponent(c[0]),false];
+  return["index.html?item="+encodeURIComponent(l),false]}
+function loadOffers(){
+  const box=$("#offers");if(!box)return;
+  findTab(h=>h.includes("headline")).then(t=>{if(!t)return;
+    const rows=parseCSV(t),head=(rows[0]||[]).map(hkey),now=new Date();
+    const list=rows.slice(1).map(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());return o})
+      .filter(o=>o.headline&&yes(o.show)).filter(o=>{const a=pdate(o.start_date),b=pdate(o.end_date,true);return(!a||a<=now)&&(!b||now<=b)});
+    let key="";try{key=list.map(o=>o.headline).join("|");if(sessionStorage.getItem("offerClosed")===key)return}catch(e){}
+    if(!list.length)return;
+    const fmt=d=>d.toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+    box.innerHTML=list.map((o,i)=>{const b=pdate(o.end_date,true),lk=offerLink(o),today=b&&b.toDateString()===now.toDateString();
+      return `<div class="offer"${i?" hidden":""} data-c="${esc(OCOL[String(o.colour||o.color||"").toLowerCase()]||(/^#[0-9a-f]{6}$/i.test(o.colour||"")?o.colour:"#B43C18"))}">
+        <h2>${esc(o.headline)}</h2>${o.details?`<p>${esc(o.details)}</p>`:""}${b?`<span class="until">${today?"Ends today":"Ends "+fmt(b)}</span>`:""}
+        ${lk?`<a class="btn" href="${esc(lk[0])}"${lk[1]?' target="_blank" rel="noopener"':""}>${esc(o.button_text||"Shop now")}</a>`:""}</div>`}).join("")+
+      (list.length>1?`<div class="odots">${list.map((o,i)=>`<button type="button" data-o="${i}" aria-label="Offer ${i+1}"${i?"":' aria-current="true"'}></button>`).join("")}</div>`:"")+
+      '<button class="ox" type="button" aria-label="Close offer">×</button><div class="zari" aria-hidden="true"></div>';
+    box.classList.toggle("multi",list.length>1);
+    let cur=0,hold=false;const all=box.querySelectorAll(".offer");
+    const show=i=>{cur=(i+all.length)%all.length;all.forEach((el,k)=>el.hidden=k!==cur);box.style.setProperty("--oc",all[cur].dataset.c);
+      box.querySelectorAll(".odots button").forEach((b,k)=>b.setAttribute("aria-current",k===cur))};
+    show(0);box.hidden=false;
+    box.querySelectorAll(".odots button").forEach(b=>b.onclick=()=>show(+b.dataset.o));
+    box.querySelector(".ox").onclick=()=>{box.hidden=true;try{sessionStorage.setItem("offerClosed",key)}catch(e){}};
+    box.addEventListener("mouseenter",()=>hold=true);box.addEventListener("mouseleave",()=>hold=false);
+    if(all.length>1&&!matchMedia("(prefers-reduced-motion: reduce)").matches)setInterval(()=>{if(!hold&&!document.hidden&&!box.hidden)show(cur+1)},6000);
+  }).catch(()=>{});
+}
+loadOffers();
