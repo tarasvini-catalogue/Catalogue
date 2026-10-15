@@ -8,7 +8,7 @@ Products come live from the published Google Sheet (Catalogue tab).
 | File | What it is |
 |---|---|
 | `index.html` | Catalogue home page |
-| `about.html`, `reviews.html`, `contact.html` | Other pages |
+| `reviews.html`, `contact.html` | Other pages (`about.html` is kept but not linked for now) |
 | `style.css` | Look of every page (colours, fonts, layout) |
 | `app.js` | Everything the site does. **Settings are at the top.** |
 | `catalogue-backup.csv` | Saved copy of the products, shown only if Google Sheets cannot be reached |
@@ -77,7 +77,7 @@ any filter, sort, search or category change starts again at 20.
 
 Occasion column: Daily Wear, Work Wear, Party Wear, Celebrity Inspired, Traditional
 Wear, Wedding Wear (several allowed, comma separated). Each category shows a row of
-occasion circles with counts above its products, plus an Occasion filter. Links can
+occasion circles with counts above its products, (the occasions are filtered from these circles only, not the filter panel). Links can
 open on an occasion: `index.html?cat=Saree&occasion=Wedding Wear`.
 Each circle shows Photo 1 of a product from that category and occasion (Featured, then
 New Arrival, then any with a photo; each circle tries to use a different product).
@@ -89,3 +89,23 @@ If any product has a Home Collection name, each name becomes one slide with up t
 four of its products (Featured, New Arrival and products with photos first), and
 its button shows just that collection. With Home Collection empty, the five biggest
 sub-categories are used automatically.
+
+## "How to order" guide
+
+Three slides (pick a product; order and pay on WhatsApp or Instagram; delivery and
+unboxing). It opens by itself once, about 2 seconds into a customer's first visit, but
+never on top of a shared product link. "How to order" in the menu opens it again, and
+`index.html#how-to-order` links straight to it. The slide text is in `GUIDE` near the
+end of `app.js`.
+
+## Messages from a product
+
+"Order on WhatsApp" fills in a message that starts with the product's Photo 1 link
+(WhatsApp shows it as a picture preview), then the name, code, price, Colour/Size
+lines to fill, and a link back to the product. Instagram DM links cannot carry text,
+so "Ask on Instagram" copies the same details and tells the customer to paste them.
+
+## Filter panel
+
+Type, Fabric, Price and Show are collapsible. Type starts open; a group opens by itself
+and shows a count badge when something in it is picked.

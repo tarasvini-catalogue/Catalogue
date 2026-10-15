@@ -39,8 +39,8 @@ const cols=p=>p.colours>3?"More colours":p.cnames.length>1?p.cnames.join(", "):p
 const and=a=>a.length>1?a.slice(0,-1).join(", ")+" and "+a[a.length-1]:a.join("");
 function colHTML(p){
   if(p.colours<2&&!p.cnames.length)return "";
-  const q=encodeURIComponent(`Hi Tarasvini, please share all the colours of ${p.name} (Code: ${p.id}).`);
-  const dm=`Message us on <a href="${IG_DM}" target="_blank" rel="noopener">Instagram</a> or <a href="https://wa.me/${WA}?text=${q}" target="_blank" rel="noopener">WhatsApp</a> to see all the colours.`;
+  const q=encodeURIComponent(prodMsg(p,"Hi Tarasvini, please share all the colours of:"));
+  const dm=`Message us on <a href="${IG_DM}" target="_blank" rel="noopener" data-igcopy="${esc(p.id)}" data-igintro="colours">Instagram</a> or <a href="https://wa.me/${WA}?text=${q}" target="_blank" rel="noopener">WhatsApp</a> to see all the colours.`;
   let t;
   if(p.colours>3)t=p.cnames.length?`${esc(p.cnames.slice(0,3).join(", "))} and more colours available. ${dm}`:`More colours available. ${dm}`;
   else if(p.cnames.length===1)t=`Colour: ${esc(p.cnames[0])}.`;
@@ -67,8 +67,12 @@ const tabs=()=>_tabs||(_tabs=Promise.all(SHEET_TABS.map(g=>fetch(tabURL(g)).then
 const findTab=test=>tabs().then(ts=>ts.find(t=>t&&test((parseCSV(t)[0]||[]).map(hkey)))||"");
 const title=s=>s.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
 const inr=n=>"₹"+n.toLocaleString("en-IN");
+// Product message for WhatsApp and Instagram. The photo link goes first so WhatsApp shows a picture preview.
+const itemURL=p=>location.origin+location.pathname.replace(/[^/]*$/,"")+"?item="+encodeURIComponent(p.id);
+const prodMsg=(p,intro,end)=>[/^https?:/.test(p.imgs[0]||"")?p.imgs[0]:"",intro,p.name,"Code: "+p.id,
+  p.price?"Price: "+inr(p.price)+(p.was?" (sale price, was "+inr(p.was)+")":""):"",p.colours>1?"Colour: ":"",p.sizes?"Size: ":"","Link: "+itemURL(p),end||""].filter(Boolean).join("\n");
 const waLink=p=>"https://wa.me/"+WA+"?text="+encodeURIComponent(
-  p?`Hi Tarasvini, I'd like to order:\n${p.name}\nCode: ${p.id}\nPrice: ${inr(p.price)}${p.was?" (sale price, was "+inr(p.was)+")":""}${p.colours>1?"\nColour: ":""}${p.sizes?"\nSize: ":""}\nPlease confirm availability and delivery.`
+  p?prodMsg(p,"Hi Tarasvini, I'd like to order:","Please confirm availability and delivery.")
    :"Hi Tarasvini, I'd like to know more about your products.");
 
 // Category colours: [strong, light tint]; used for photo placeholders
@@ -226,7 +230,7 @@ function buildFilters(){
   const used=new Set(),oimg={};ok.forEach(o=>oimg[o]=occPhoto(items.filter(p=>p.occ.includes(o)),used));
   $("#occrow").innerHTML=ok.length?[occTile("","All "+CAT()[3],items.length,"#24180C",ALL_ICON,occPhoto(items,used)),...ok.map(o=>{const L=OCC_LOOK[o]||["#B43C18",ALL_ICON];return occTile(o,o,oc[o],L[0],L[1],oimg[o])})].join(""):"";
   $("#occrow").hidden=!ok.length;
-  $("#o-occ").innerHTML=ok.map(o=>`<label class="fopt"><input type="checkbox" data-f="occ" value="${esc(o)}"><span>${esc(o)}</span><small>${oc[o]}</small></label>`).join("");$("#g-occ").hidden=!ok.length;$("#g-fab").hidden=Object.keys(fc).length<2;
+  if($("#o-occ"))$("#o-occ").innerHTML=ok.map(o=>`<label class="fopt"><input type="checkbox" data-f="occ" value="${esc(o)}"><span>${esc(o)}</span><small>${oc[o]}</small></label>`).join("");if($("#g-occ"))$("#g-occ").hidden=!ok.length;$("#g-fab").hidden=Object.keys(fc).length<2;
   const nn=items.filter(p=>p.isnew).length;$("#newopt").hidden=!nn;$("#newn").textContent=nn||"";
   const ns=items.filter(p=>p.onsale).length;$("#saleopt").hidden=!ns;$("#salen").textContent=ns||"";
   $("#o-price").innerHTML=PRICES.map(([v,l])=>`<label class="fopt"><input type="radio" name="price" value="${v}"${sel.price===v?" checked":""}><span>${l}</span></label>`).join("");
@@ -263,7 +267,11 @@ function render(keep){
   $("#more").hidden=!left;$("#more").textContent=`Show ${Math.min(MORE,left)} more (${left} left)`;
   $("#grid").innerHTML=list.length?list.slice(0,state.shown).map(cardHTML).join(""):`<div class="empty"><p>No ${CAT()[3]} match ${q?"“"+esc(qv)+"”":"these filters"}.</p>${q?present().filter(c=>c[0]!==state.cat).map(c=>[c,state.all.filter(p=>p.category===c[0]&&hit(p,q)).length]).filter(x=>x[1]).map(([c,n])=>`<button class="btn" type="button" data-cat="${c[0]}">See ${n} in ${esc(c[1])}</button> `).join(""):""}<button class="btn" type="button" onclick="clearFilters()">Clear filters</button></div>`;
 }
-function syncPanel(){document.querySelectorAll("#fpanel [data-f]").forEach(i=>i.checked=sel[i.dataset.f].has(i.value));document.querySelectorAll("#fpanel [name=price]").forEach(i=>i.checked=i.value===sel.price)}
+// Collapsible filter groups: show how many are picked in each heading; open a group that has a choice
+function groupCounts(){document.querySelectorAll("#fpanel details.fgrp").forEach(d=>{const n=d.querySelectorAll("input:checked:not([value=''])").length;
+  const s=d.querySelector("summary");let b=s.querySelector(".gcount");if(!b){b=document.createElement("span");b.className="gcount";s.appendChild(b)}
+  b.textContent=n?n:"";b.hidden=!n;if(n)d.open=true})}
+function syncPanel(){setTimeout(groupCounts);document.querySelectorAll("#fpanel [data-f]").forEach(i=>i.checked=sel[i.dataset.f].has(i.value));document.querySelectorAll("#fpanel [name=price]").forEach(i=>i.checked=i.value===sel.price)}
 function openPanel(o){const f=$("#fpanel");f.classList.toggle("is-open",o);$("#ftoggle").setAttribute("aria-expanded",o);document.body.style.overflow=o?"hidden":"";if(o)$("#fclose").focus();else $("#ftoggle").focus()}
 const cardHTML=p=>`
     <article class="card${p.sold?" is-sold":""}">
@@ -297,7 +305,7 @@ function openDlg(id){
     ${p.delivery?`<dt>Delivery</dt><dd>${esc(p.delivery)}, working days</dd>`:""}</dl>
     ${vid}
     <div class="dacts">${p.sold?'<button class="btn" type="button" disabled>Sold out</button>':`<a class="btn wa" href="${waLink(p)}" target="_blank" rel="noopener">${IC.wa}Order on WhatsApp</a>`}
-      <div class="row"><a class="btn" href="${IG_DM}" target="_blank" rel="noopener">${IC.ig}Ask on Instagram</a><button class="btn" type="button" data-share="${esc(p.id)}">${IC.sh}Share</button></div></div>
+      <div class="row"><a class="btn" href="${IG_DM}" target="_blank" rel="noopener" data-igcopy="${esc(p.id)}">${IC.ig}Ask on Instagram</a><button class="btn" type="button" data-share="${esc(p.id)}">${IC.sh}Share</button></div></div>
     <div class="policy"><p><strong>No cash on delivery.</strong> We confirm payment with you on WhatsApp.</p><p>Returns or exchanges only for damaged or wrong items, reported within 24–48 hours with a full, uncut unboxing video.</p></div>
   </div></div>`;
   let cur=0;d.onkeydown=null;
@@ -385,7 +393,13 @@ if($("#revform"))wireForm("#revform","#revstat","Thank you. We will show your re
 if($("#revlist"))loadReviews();
 const IC={"ig": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"5\"/><circle cx=\"12\" cy=\"12\" r=\"4\"/><circle cx=\"17.2\" cy=\"6.8\" r=\".6\" fill=\"currentColor\"/></svg>", "wa": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M20 11.5a8 8 0 0 1-11.9 7L4 20l1.5-4A8 8 0 1 1 20 11.5z\"/><path d=\"M9.2 8.8c.3 2.4 2.5 4.6 5 5l1-1.2-1.7-.9-.8.6c-.9-.4-1.6-1.1-2-2l.6-.8-.9-1.7z\"/></svg>", "sh": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"18\" cy=\"5\" r=\"2.6\"/><circle cx=\"6\" cy=\"12\" r=\"2.6\"/><circle cx=\"18\" cy=\"19\" r=\"2.6\"/><path d=\"M8.3 10.8l7.4-4.4M8.3 13.2l7.4 4.4\"/></svg>"};
 const IG_DM="https://ig.me/m/tarasvini";
-function toast(t){const d=document.createElement("div");d.className="toast";d.setAttribute("role","status");d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2500)}
+function toast(t,ms){const d=document.createElement("div");d.className="toast";d.setAttribute("role","status");d.textContent=t;(document.querySelector("dialog[open]")||document.body).appendChild(d);setTimeout(()=>d.remove(),ms||2500)}
+// Instagram DM links cannot carry a message, so copy the product details for the customer to paste.
+function copyText(t){let ok=false;try{const a=document.createElement("textarea");a.value=t;a.setAttribute("readonly","");a.style.cssText="position:fixed;opacity:0;top:0";(document.querySelector("dialog[open]")||document.body).appendChild(a);a.select();ok=document.execCommand("copy");a.remove()}catch(e){}
+  if(!ok&&navigator.clipboard)navigator.clipboard.writeText(t).catch(()=>{});return true}
+document.addEventListener("click",e=>{const a=e.target.closest("[data-igcopy]");if(!a)return;const p=state.all.find(x=>x.id===a.dataset.igcopy);if(!p)return;
+  copyText(prodMsg(p,a.dataset.igintro==="colours"?"Hi Tarasvini, please share all the colours of:":"Hi Tarasvini, I'd like to know about:"));
+  toast("Product details copied. Paste them in the Instagram chat.",4000)},true);
 function share(d){
   let s=document.getElementById("shr");
   if(!s){
@@ -477,3 +491,49 @@ function loadOffers(){
   }).catch(()=>{});
 }
 loadOffers();
+
+// ---------- "How to order" guide: 3 slides. Opens once on a first visit; reopen from the menu. ----------
+const GUIDE=[
+ {c:"#B0185A",h:"Pick your favourite",p:"Browse the catalogue and tap any product to see photos, sizes, colours and the delivery time.",
+  l:["Use the filters to find your occasion","Note the product code shown on each item"],chips:()=>CATS.slice(0,3).map(c=>c[1].split(" ")[0]),
+  svg:'<path d="M20 8h24l8 10-6 6v32H18V24l-6-6z"/><path d="M26 8c0 4 3 7 6 7s6-3 6-7"/>'},
+ {c:"#1F8A4C",h:"Order and pay on WhatsApp or Instagram",p:"Tap “Order on WhatsApp” or send us a DM on Instagram. We confirm stock, size and the total, then share the payment details.",
+  l:["Prepaid orders only, no cash on delivery","Pay only to the details we send you"],chips:()=>["WhatsApp","Instagram"],
+  svg:'<path d="M54 31a22 22 0 0 1-32.7 19.2L10 54l4-11A22 22 0 1 1 54 31z"/><path d="M25 25c1 6 6 11 12 12l3-3-5-3-2 2c-2.5-1-4.5-3-5.5-5.5l2-2-3-5z"/>'},
+ {c:"#E39B12",h:"Delivery and unboxing",p:"Your order reaches you in 7–15 working days.",
+  l:["Record a full, uncut unboxing video","Damaged or wrong item? Tell us within 24–48 hours with the video"],chips:()=>["7–15 days"],
+  svg:'<path d="M10 22l22-10 22 10v22L32 54 10 44z"/><path d="M10 22l22 10 22-10M32 32v22"/><circle cx="46" cy="46" r="8" fill="#fff" stroke="none"/><path d="M43.5 42.5v7l6-3.5z" fill="#E39B12" stroke="none"/>'}];
+function openGuide(){
+  let d=$("#guide");
+  if(!d){d=document.createElement("dialog");d.id="guide";d.setAttribute("aria-label","How to order");document.body.appendChild(d);
+    d.addEventListener("click",e=>{if(e.target===d)d.close()});
+    let x0=null;d.addEventListener("touchstart",e=>x0=e.touches[0].clientX,{passive:true});
+    d.addEventListener("touchend",e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;x0=null;if(Math.abs(dx)>50)show(d.i+(dx<0?1:-1))});
+    d.addEventListener("keydown",e=>{if(e.key==="ArrowRight")show(d.i+1);if(e.key==="ArrowLeft")show(d.i-1)});
+    d.addEventListener("close",()=>{try{localStorage.setItem("guideSeen","1")}catch(e){}});
+  }
+  const show=i=>{if(i<0||i>=GUIDE.length)return;d.i=i;const s=GUIDE[i],last=i===GUIDE.length-1;d.style.setProperty("--gc",s.c);
+    d.innerHTML=`<button class="gx" type="button" aria-label="Close">×</button>
+    <div class="gvis"><span class="gnum" aria-hidden="true">0${i+1}</span><div class="gic"><svg viewBox="0 0 64 64" aria-hidden="true">${s.svg}</svg></div><div class="gchips">${s.chips().map(c=>`<span>${esc(c)}</span>`).join("")}</div></div>
+    <div class="gbody"><span class="gkick">How to order · ${i+1} of ${GUIDE.length}</span><h2>${s.h}</h2><p>${s.p}</p><ul>${s.l.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <div class="gfoot"><div class="gdots">${GUIDE.map((_,k)=>`<button type="button" data-g="${k}" aria-label="Step ${k+1}"${k===i?' aria-current="true"':""}></button>`).join("")}</div>
+    ${last?'<button class="gbtn ggo" type="button" data-gend>Start shopping</button>':'<button class="gbtn gskip" type="button" data-gskip>Skip</button><button class="gbtn gnext" type="button" data-gnext>Next</button>'}</div></div>`;
+    d.querySelector(".gx").onclick=()=>d.close();
+    d.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>show(+b.dataset.g));
+    const n=d.querySelector("[data-gnext]");if(n)n.onclick=()=>show(i+1);
+    const sk=d.querySelector("[data-gskip]");if(sk)sk.onclick=()=>d.close();
+    const g=d.querySelector("[data-gend]");if(g)g.onclick=()=>{d.close();const sh=document.getElementById("shop");if(sh)sh.scrollIntoView({behavior:"smooth"});else location.href="index.html#shop"};
+    d.tabIndex=-1;d.focus({preventScroll:true})};
+  if(!d.open)d.showModal();show(0);
+}
+(function(){
+  const nav=document.querySelector(".nav"),sep=nav&&nav.querySelector(".sep");
+  if(sep){const a=document.createElement("a");a.className="pg";a.href="#how-to-order";a.textContent="How to order";sep.after(a)}
+  document.addEventListener("click",e=>{const l=e.target.closest('a[href$="#how-to-order"]');if(l&&!e.metaKey&&!e.ctrlKey){e.preventDefault();openGuide()}});
+  if(location.hash==="#how-to-order"){openGuide();return}
+  let seen=false;try{seen=!!localStorage.getItem("guideSeen")}catch(e){seen=true}
+  // first visit only; never on top of a shared product link
+  if(!seen&&!new URLSearchParams(location.search).get("item"))setTimeout(()=>{const p=$("#dlg");if(!(p&&p.open))openGuide()},2000);
+})();
+
+if($("#fpanel"))$("#fpanel").addEventListener("change",()=>setTimeout(groupCounts));
