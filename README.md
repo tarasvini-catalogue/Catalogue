@@ -91,10 +91,11 @@ Nothing to maintain: an occasion with no photos yet shows its coloured icon inst
 
 ## Collage carousel (top of home page)
 
-If any product has a Home Collection name, each name becomes one slide with up to
-four of its products (Featured, New Arrival and products with photos first), and
-its button shows just that collection. With Home Collection empty, the five biggest
-sub-categories are used automatically.
+Up to 5 slides. Every Home Collection name comes first, one slide per name and category
+("Festival" on salwars and on kurtis gives two slides; capitals and spaces don't matter).
+The remaining places are filled with the biggest sub-categories (at least 3 products),
+preferring categories not shown yet. Each slide shows up to four products (Featured,
+New Arrival and products with photos first). Change the number of slides with HERO_MAX in app.js.
 
 ## "How to order" guide
 

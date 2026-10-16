@@ -115,6 +115,7 @@ function load(){
     state.all=recs.map((o,i)=>({...o,i,category:catKey(o.category),...colInfo(o.colours),
         ...(()=>{const mrp=num(o.price),sp=num(o.sale);return sp>0&&sp<mrp?{price:sp,was:mrp,onsale:true}:{price:mrp,was:0,onsale:false}})(),
         coll:(c=>c===c.toLowerCase()?title(c):c)(String(o.collection||"").replace(/\s+/g," ").trim()),
+        homecoll:(c=>c===c.toLowerCase()?title(c):c)(String(o.homecoll||"").replace(/\s+/g," ").trim()),
         occ:String(o.occ||"").split(/[,;\/]+/).map(x=>title(x.trim())).filter(Boolean),imgs:getImgs(o),sold:/^sold/i.test(o.available),feat:yes(o.featured),isnew:yes(o.isnew)}));
     init();
   }).catch(()=>{
@@ -163,15 +164,21 @@ function buildFeatured(){
   setInterval(()=>{if(!paused&&!hold&&!document.hidden&&!$("#dlg").open)go(1)},5000);
 }
 // Collage carousel at the top: one slide per collection.
-// Uses the "Home Collection" column if any product has it, otherwise the biggest sub-categories.
+// Slides: every "Home Collection" name first (one slide per name and category), then the biggest
+// sub-categories fill the carousel up to HERO_MAX slides.
 function buildHero(){
   const box=$("#hcar");if(!box)return;
   const pool=state.all.filter(p=>!p.sold);
-  const useCol=pool.some(p=>p.homecoll);
-  const g={};pool.forEach(p=>{const k=useCol?p.homecoll:p.coll;if(!k)return;(g[k]=g[k]||{name:k,items:[]}).items.push(p)});
-  let list=Object.values(g).filter(c=>c.items.length>=(useCol?1:3));
+  const HERO_MAX=5;
   const score=c=>c.items.filter(p=>p.feat||p.isnew).length*100+c.items.filter(p=>p.imgs.length).length*10+c.items.length;
-  if(!useCol)list=list.sort((a,b)=>score(b)-score(a)).slice(0,5);
+  const group=(key,name)=>{const g={};pool.forEach(p=>{const n=name(p);if(!n)return;const k=key(p,n);(g[k]=g[k]||{name:n,items:[]}).items.push(p)});return Object.values(g)};
+  // named collections ("Festival" salwars and "Festival" kurtis are two slides)
+  let list=group((p,n)=>n.toLowerCase()+"|"+p.category,p=>p.homecoll).map(c=>({...c,home:true}));
+  // top up with the biggest sub-categories (at least 3 products), preferring categories not shown yet
+  const shown=new Set(list.map(c=>c.items[0].category));
+  const auto=group((p,n)=>n+"|"+p.category,p=>p.coll).filter(c=>c.items.length>=3);
+  const rank=c=>(shown.has(c.items[0].category)?0:100000)+score(c);
+  while(list.length<HERO_MAX&&auto.length){let b=0;auto.forEach((c,i)=>{if(rank(c)>rank(auto[b]))b=i});const c=auto.splice(b,1)[0];list.push(c);shown.add(c.items[0].category)}
   if(!list.length){box.closest(".hero").hidden=true;return}
   const catOf=c=>{const n={};c.items.forEach(p=>n[p.category]=(n[p.category]||0)+1);return Object.keys(n).sort((a,b)=>n[b]-n[a])[0]};
   box.innerHTML=list.map((c,i)=>{
@@ -180,7 +187,7 @@ function buildHero(){
     return `<div class="hslide"${i?" hidden":""} role="group" aria-roledescription="slide" aria-label="${i+1} of ${list.length}: ${esc(c.name)}">
       <div class="htext"><p class="hcat">${esc(cl[1])}</p><h1>${esc(c.name)}</h1>
         <p>${c.items.length} ${c.items.length===1?cl[2]:cl[3]}${pr.length?" from "+inr(Math.min(...pr)):""}</p>
-        <button class="btn primary" type="button" data-hcat="${esc(k)}" data-hcoll="${useCol?"":esc(c.name)}" data-hhome="${useCol?esc(c.name):""}">Shop this collection</button></div>
+        <button class="btn primary" type="button" data-hcat="${esc(k)}" data-hcoll="${c.home?"":esc(c.name)}" data-hhome="${c.home?esc(c.name):""}">Shop this collection</button></div>
       <div class="collage n${its.length}">${its.map(p=>`<button class="open" type="button" data-id="${esc(p.id)}" aria-label="${esc(p.name)}">${ph(p,false)}</button>`).join("")}</div></div>`}).join("")+
     (list.length>1?`<div class="hctl"><button class="hnav hprev" type="button" aria-label="Previous collection">&#8249;</button><div class="hdots">${list.map((c,i)=>`<button type="button" data-h="${i}" aria-label="${esc(c.name)}"${i?"":' aria-current="true"'}></button>`).join("")}</div><button class="hnav hnext" type="button" aria-label="Next collection">&#8250;</button></div>`:"");
   const sl=box.querySelectorAll(".hslide");let cur=0,hold=false;
@@ -256,7 +263,7 @@ function render(keep){
     return;
   }
   const qv=$("#q").value.trim(), q=qv.toLowerCase(), stock=$("#stock").checked, nw=$("#newonly").checked, so=$("#saleonly").checked, sort=$("#sort").value;
-  let list=state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!sel.occ.size||p.occ.some(o=>sel.occ.has(o)))&&(!sel.home||p.homecoll===sel.home)&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)&&(!q||hit(p,q)));
+  let list=state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!sel.occ.size||p.occ.some(o=>sel.occ.has(o)))&&(!sel.home||p.homecoll.toLowerCase()===sel.home.toLowerCase())&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)&&(!q||hit(p,q)));
   list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(b.feat-a.feat)||(b.isnew-a.isnew)||(a.sold-b.sold)||(a.i-b.i));
   // chips for what is selected
   const chips=[...(sel.home?[["home","","Collection: "+sel.home]]:[]),...[...sel.occ].map(v=>["occ",v,v]),...[...sel.type].map(v=>["type",v,v]),...[...sel.fab].map(v=>["fab",v,v])];
