@@ -30,6 +30,12 @@ Now and then, refresh the backup: in Google Sheets open the Catalogue tab,
 File > Download > CSV, rename the file to `catalogue-backup.csv` and upload
 it here, replacing the old one.
 
+## Product tabs
+
+Products can be in one Catalogue tab or in one tab per category (Sarees, Salwar Suits,
+Kurtis & Gowns, ...), all with the same columns. Add every product tab's gid to
+`SHEET_TABS`; the site merges them. A Product Code found in two tabs is shown once.
+
 ## Sheet columns the site reads
 
 Product Code, Category, Sub-category, Product Name, Fabric, Colours, Sizes, Price,

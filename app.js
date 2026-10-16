@@ -3,8 +3,9 @@
 // Published Google Sheet (File > Share > Publish to web). Each tab has a gid number:
 // open the tab and read it from the address bar, e.g. ...edit#gid=123456789
 const SHEET_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS9qQBcSytVNNAHcNGVlK4E-JdTrTEHP4oKuYvKhzIn24d9zHl_zm6iq6k9UlgLdw/pub";
-// gids of the Catalogue and Offers tabs, in any order: the site tells them apart by their column headings
-const SHEET_TABS=["671338846","1848690372","765422921","58829998","951620432","818691743"]; // Catalogue, Offers (+ earlier numbers as fallback)
+// gids of the product tabs (one Catalogue tab, or one tab per category) and the Offers tab, in any order:
+// the site tells them apart by their column headings
+const SHEET_TABS=["664938297","311735615","2084325073","713636433","514300202","1692605283"]; // Sarees, Salwar Suits, Kurtis & Gowns, Lehengas, Cord-sets, Offers
 const tabURL=g=>SHEET_URL+(g?"?gid="+g+"&single=true&output=csv":"?output=csv");
 const REVIEWS_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vRb2S-qjo-0bX-2i7J1DDT6V1v6I27PaHz97hULeNk8Gxv0POvyKnnCLhDEPCml8Q/pub?output=csv"; // published CSV of the Reviews sheet
 const WA="918925552441"; // WhatsApp number with country code, no +
@@ -92,12 +93,20 @@ const tags=p=>{const t=p.sold?['<span class="tag sold">Sold out</span>']:[p.isne
 // Google Drive share links -> direct image links (the file must be shared "Anyone with the link")
 const imgURL=u=>{const m=u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]{20,})/)||u.match(/docs\.google\.com\/uc\?(?:export=\w+&)?id=([\w-]{20,})/);return m?"https://lh3.googleusercontent.com/d/"+m[1]+"=w1200":u};
 const getImgs=o=>{const seen=[];Object.keys(o).filter(k=>/^image_url(_\d+)?$/.test(k)).sort((a,b)=>(parseInt(a.split("_")[2])||1)-(parseInt(b.split("_")[2])||1)).forEach(k=>String(o[k]||"").split(/[\s,|]+/).forEach(u=>{u=imgURL(u.trim());if(u&&!seen.includes(u))seen.push(u)}));return seen.slice(0,8)};
+// Products can be in one Catalogue tab or in one tab per category (Sarees, Salwar Suits, ...).
+// Every published tab with Product Code + Product Name headings is read and merged; a code that
+// appears twice is taken from the first tab only.
 function readCatalogue(){
-  return findTab(h=>h.includes("id")&&h.includes("name")).then(t=>{if(!t)throw 0;return t}).catch(()=>{const n=$("#note");if(n)n.hidden=false;return fetch(BACKUP_CSV).then(r=>{if(!r.ok)throw 0;return r.text()})}).then(t=>{
-    const rows=parseCSV(t), head=rows[0].map(hkey);
-    let recs=rows.slice(1).map(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());return o}).filter(o=>o.id&&o.name&&!/^hid/i.test(o.available));
+  const isCat=t=>{const h=(parseCSV(t)[0]||[]).map(hkey);return h.includes("id")&&h.includes("name")};
+  return tabs().then(ts=>{const c=ts.filter(t=>t&&isCat(t));if(!c.length)throw 0;return c})
+  .catch(()=>{const n=$("#note");if(n)n.hidden=false;return fetch(BACKUP_CSV).then(r=>{if(!r.ok)throw 0;return r.text()}).then(t=>[t])})
+  .then(texts=>{
+    const seen=new Set();let recs=[],hasShow=false;
+    texts.forEach(t=>{const rows=parseCSV(t),head=rows[0].map(hkey);if(head.includes("show"))hasShow=true;
+      rows.slice(1).forEach(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());
+        if(o.id&&o.name&&!/^hid/i.test(o.available)&&!seen.has(o.id)){seen.add(o.id);recs.push(o)}})});
     // "Show on Website": only ticked rows appear. If the column is missing or nothing is ticked yet, everything shows.
-    if(head.includes("show")&&recs.some(o=>yes(o.show)))recs=recs.filter(o=>yes(o.show));
+    if(hasShow&&recs.some(o=>yes(o.show)))recs=recs.filter(o=>yes(o.show));
     setCats(recs);return recs});
 }
 const catsReady=$("#grid")?null:readCatalogue().catch(()=>{});
@@ -355,6 +364,9 @@ function loadReviews(){
       .filter(o=>o.message&&o.name&&!/^n/i.test(o.show)).reverse());
   }).catch(()=>renderReviews([],true));
 }
+// Review dates: show as "13 Oct 2026" whatever way they were typed (also fixes "1310/2026")
+function revDate(v){v=String(v||"").trim();const m=v.match(/^(\d{2})(\d{2})[\/.\-](\d{4})$/);if(m)v=m[1]+"/"+m[2]+"/"+m[3];
+  const d=pdate(v);return d&&!isNaN(d)?d.toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):v}
 function renderReviews(list,err){
   const box=$("#revlist");
   if(!list.length){box.innerHTML=`<p class="empty">${err?"Reviews could not be loaded right now.":"No reviews yet. Be the first to share yours."}</p>`;$("#revsum").textContent="";return}
@@ -368,7 +380,7 @@ function renderReviews(list,err){
       <p>${esc(r.message)}</p>
       ${imgs.length?`<div class="rimgs">${imgs.map(u=>`<button class="rimgb" data-big="${esc(u)}" aria-label="View photo larger"><img src="${esc(u)}" alt="Photo from ${esc(r.name)}" loading="lazy" onerror="this.closest('button').remove()"></button>`).join("")}</div>`:""}
       ${videoHTML(r.video_url)}
-      <div class="by">${esc(r.name)}${r.date?" · "+esc(r.date):""}</div>
+      <div class="by">${esc(r.name)}${r.date?" · "+esc(revDate(r.date)):""}</div>
     </article>`}).join("");
 }
 function wireForm(id,statId,ok){
