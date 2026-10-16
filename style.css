@@ -415,3 +415,26 @@ dialog#guide::backdrop{background:rgba(36,24,12,.55);backdrop-filter:blur(3px)}
   .gbody{padding:20px 20px 22px}.gbody h2{font-size:24px}.gbody p{font-size:15px}
 }
 dialog#guide:focus{outline:none}
+
+/* collage section: warm Tarasvini background */
+.hero{position:relative;overflow:hidden;isolation:isolate;
+  background:
+    radial-gradient(circle at 8% 20%,rgba(227,155,18,.30),transparent 40%),
+    radial-gradient(circle at 96% 90%,rgba(176,24,90,.26),transparent 45%),
+    radial-gradient(circle at 60% 0%,rgba(15,107,107,.10),transparent 35%),
+    linear-gradient(115deg,#FFF1DC 0%,#FDE3EA 52%,#FFEFD9 100%)}
+.hero:before{content:"";position:absolute;inset:0;z-index:-1;opacity:.55;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Cg fill='none' stroke='%23B43C18' stroke-opacity='.16' stroke-width='1.2'%3E%3Cpath d='M36 22c4 5 4 9 0 14-4-5-4-9 0-14zM36 50c4-5 4-9 0-14-4 5-4 9 0 14zM22 36c5-4 9-4 14 0-5 4-9 4-14 0zM50 36c-5-4-9-4-14 0 5 4 9 4 14 0z'/%3E%3Ccircle cx='36' cy='36' r='2.2'/%3E%3C/g%3E%3Cg fill='%23B0185A' fill-opacity='.18'%3E%3Ccircle cx='0' cy='0' r='2'/%3E%3Ccircle cx='72' cy='0' r='2'/%3E%3Ccircle cx='0' cy='72' r='2'/%3E%3Ccircle cx='72' cy='72' r='2'/%3E%3C/g%3E%3C/svg%3E");
+  background-size:72px 72px}
+.hero:after{content:"";position:absolute;left:0;right:0;bottom:0;height:8px;
+  background:repeating-linear-gradient(90deg,#B0185A 0 28px,#E39B12 28px 56px,#0F6B6B 56px 84px,#B43C18 84px 112px)}
+.htext{position:relative}
+.htext:before{content:"";position:absolute;z-index:-1;left:-40px;top:50%;width:300px;height:300px;transform:translateY(-55%);opacity:.11;pointer-events:none;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg fill='none' stroke='%23B0185A' stroke-width='1.6' stroke-linejoin='round'%3E%3Cpath d='M50 18c9 12 9 28 0 44-9-16-9-32 0-44z'/%3E%3Cpath d='M50 62c-4-14-14-24-28-26 2 14 12 24 28 26z'/%3E%3Cpath d='M50 62c4-14 14-24 28-26-2 14-12 24-28 26z'/%3E%3Cpath d='M50 62c-10-6-22-6-34 0 12 6 24 6 34 0z'/%3E%3Cpath d='M50 62c10-6 22-6 34 0-12 6-24 6-34 0z'/%3E%3Cpath d='M30 74h40M36 80h28'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat}
+.hcat{display:inline-block;background:#fff;color:var(--rani,#B0185A);border-radius:20px;padding:4px 12px;font-size:13px;letter-spacing:.5px;box-shadow:0 2px 8px rgba(176,24,90,.12)}
+.htext h1{color:#24180C}
+.collage .open{border-radius:12px;box-shadow:0 8px 22px rgba(90,30,20,.18);outline:3px solid #fff;outline-offset:-1px}
+.collage .ph{border-radius:12px}
+.hctl .hnav{background:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(36,24,12,.12)}
+.hdots button{background:rgba(36,24,12,.18)}
+@media(max-width:900px){.htext:before{left:50%;width:220px;height:220px;transform:translate(-50%,-55%)}}
