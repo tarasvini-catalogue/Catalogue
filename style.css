@@ -459,3 +459,15 @@ dialog#guide:focus{outline:none}
 .desc li{margin:3px 0;line-height:1.45}
 .desc li::marker{color:var(--rani,#B0185A)}
 .desc b{font-weight:600}
+
+/* "more in this collection" note */
+.more-note{margin:4px 0 18px;padding:12px 14px;border-radius:10px;background:#E8F4F3;border-left:4px solid var(--peacock,#0F6B6B);font-size:14.5px;line-height:1.5}
+.more-note b{display:block;color:var(--peacock,#0F6B6B);margin-bottom:2px}
+.more-note a{color:var(--peacock,#0F6B6B);font-weight:700;text-decoration:underline}
+/* desktop product window: photo stays in place, details scroll on their own */
+@media(min-width:901px){
+  .dg{overflow:hidden;align-items:stretch}
+  .gal{min-height:min(92vh,660px);max-height:92vh}
+  .dg .ph{aspect-ratio:auto;height:100%;max-height:none}
+  .dg .body{max-height:92vh;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+}

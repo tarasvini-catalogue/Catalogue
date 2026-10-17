@@ -59,13 +59,16 @@ function descHTML(t){
   close();return html}
 function colHTML(p){
   if(p.colours<2&&!p.cnames.length)return "";
-  const q=encodeURIComponent(prodMsg(p,"Hi Tarasvini, please share all the colours of:"));
-  const dm=`Message us on <a href="${IG_DM}" target="_blank" rel="noopener" data-igcopy="${esc(p.id)}" data-igintro="colours">Instagram</a> or <a href="https://wa.me/${WA}?text=${q}" target="_blank" rel="noopener">WhatsApp</a> to see all the colours.`;
   let t;
-  if(p.colours>3)t=p.cnames.length?`${esc(p.cnames.slice(0,3).join(", "))} and more colours available. ${dm}`:`More colours available. ${dm}`;
+  if(p.colours>3)t=p.cnames.length?`${esc(p.cnames.slice(0,3).join(", "))} and more colours available.`:"More colours available.";
   else if(p.cnames.length===1)t=`Colour: ${esc(p.cnames[0])}.`;
   else t=(p.cnames.length?`Available in ${esc(and(p.cnames))}.`:`Available in ${p.colours} colours.`)+" Tell us your colour when you order.";
   return `<div class="opt"><h4>Colours</h4><p>${t}</p></div>`}
+// "More in this collection" note on every product: links to ask for all colours and sizes
+function moreHTML(p){
+  const what=p.sizes?"colour or size":"colour or design";
+  const q=encodeURIComponent(prodMsg(p,"Hi Tarasvini, please share all the colours and sizes of:"));
+  return `<div class="more-note"><b>Looking for another ${what}?</b><span>We have more in this collection. Message us on <a href="${IG_DM}" target="_blank" rel="noopener" data-igcopy="${esc(p.id)}" data-igintro="colours">Instagram</a> or <a href="https://wa.me/${WA}?text=${q}" target="_blank" rel="noopener">WhatsApp</a> and we'll share all the options.</span></div>`}
 const inCat=()=>state.all.filter(p=>p.category===state.cat);
 
 function parseCSV(t){
@@ -344,7 +347,7 @@ function openDlg(id){
     ${imgs.length>1?`<button class="gnav gprev" type="button" aria-label="Previous photo">&#8249;</button><button class="gnav gnext" type="button" aria-label="Next photo">&#8250;</button><div class="thumbs">${imgs.map((u,i)=>`<button type="button" data-i="${i}" aria-label="Photo ${i+1}"><img src="${esc(u)}" alt=""></button>`).join("")}</div>`:""}</div>
   <div class="body">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<h2>${esc(p.name)}</h2><div class="price">${priceHTML(p)}</div>${(o=>o?`<p class="offerline"><b>${esc(o.headline)}</b><span>${esc(offerLine(o))}. Applied when we confirm your order on WhatsApp.</span></p>`:"")(offerFor(p))}
     ${sizes.length?`<div class="opt"><h4>Sizes</h4><div class="sizes">${sizes.map(s=>`<span>${esc(s)}</span>`).join("")}</div></div>`:""}
-    ${colHTML(p)}
+    ${colHTML(p)}${moreHTML(p)}
     ${p.description?`<div class="desc">${descHTML(p.description)}</div>`:""}
     <dl><dt>Code</dt><dd>${esc(p.id)}</dd>
     ${p.fabric_group?`<dt>Fabric</dt><dd>${esc(p.fabric_group)}</dd>`:""}
@@ -448,7 +451,7 @@ function toast(t,ms){const d=document.createElement("div");d.className="toast";d
 function copyText(t){let ok=false;try{const a=document.createElement("textarea");a.value=t;a.setAttribute("readonly","");a.style.cssText="position:fixed;opacity:0;top:0";(document.querySelector("dialog[open]")||document.body).appendChild(a);a.select();ok=document.execCommand("copy");a.remove()}catch(e){}
   if(!ok&&navigator.clipboard)navigator.clipboard.writeText(t).catch(()=>{});return true}
 document.addEventListener("click",e=>{const a=e.target.closest("[data-igcopy]");if(!a)return;const p=state.all.find(x=>x.id===a.dataset.igcopy);if(!p)return;
-  copyText(prodMsg(p,a.dataset.igintro==="colours"?"Hi Tarasvini, please share all the colours of:":"Hi Tarasvini, I'd like to know about:"));
+  copyText(prodMsg(p,a.dataset.igintro==="colours"?"Hi Tarasvini, please share all the colours and sizes of:":"Hi Tarasvini, I'd like to know about:"));
   toast("Product details copied. Paste them in the Instagram chat.",4000)},true);
 function share(d){
   let s=document.getElementById("shr");
