@@ -442,3 +442,12 @@ dialog#guide:focus{outline:none}
 /* live offer line in the product window */
 .offerline{margin:12px 0 4px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,#FDE3EA,#FFF1DC);border-left:4px solid var(--rani,#B0185A);font-size:14.5px;line-height:1.45}
 .offerline b{display:block;color:var(--rani,#B0185A);font-size:15px;margin-bottom:2px}
+
+/* desktop: filters can be docked (side panel) or hidden (wider product grid) */
+@media(min-width:901px){
+  .ftoggle{display:inline-flex}
+  body.fhide .shopbody{grid-template-columns:minmax(0,1fr)}
+  body.fhide .fpanel{display:none}
+  body.fhide .grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(min-width:901px) and (max-width:1100px){body.fhide .grid{grid-template-columns:repeat(3,minmax(0,1fr))}}

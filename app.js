@@ -471,7 +471,14 @@ if($("#grid")){
     render()});
   $("#clr").onclick=clearFilters;
   $("#more").onclick=()=>{const n=state.shown;state.shown+=MORE;render(true);const c=$("#grid").children[n];if(c){const l=c.querySelector("a,button");if(l)l.focus({preventScroll:true})}};
-  $("#ftoggle").onclick=()=>openPanel(true);$("#fclose").onclick=()=>openPanel(false);
+  // Desktop: the button docks/undocks the filter panel (remembered); phone: it opens the full-screen panel
+  const wide=()=>matchMedia("(min-width:901px)").matches;
+  const dock=on=>{document.body.classList.toggle("fhide",!on);$("#ftoggle").setAttribute("aria-expanded",on);
+    $("#ftlabel").textContent=wide()&&on?"Hide filters":"Filters";try{localStorage.setItem("filtersHidden",on?"":"1")}catch(e){}};
+  let hidden=false;try{hidden=!!localStorage.getItem("filtersHidden")}catch(e){}
+  dock(!hidden);
+  matchMedia("(min-width:901px)").addEventListener("change",()=>dock(!document.body.classList.contains("fhide")));
+  $("#ftoggle").onclick=()=>wide()?dock(document.body.classList.contains("fhide")):openPanel(true);$("#fclose").onclick=()=>openPanel(false);
   $("#fdone").onclick=()=>{openPanel(false);document.getElementById("shop").scrollIntoView()};
   addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#fpanel").classList.contains("is-open"))openPanel(false)});
   $("#hsearch").addEventListener("submit",e=>{e.preventDefault();render();document.getElementById("shop").scrollIntoView()});

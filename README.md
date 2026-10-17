@@ -126,5 +126,9 @@ so "Ask on Instagram" copies the same details and tells the customer to paste th
 
 ## Filter panel
 
+On a computer, "Hide filters" hides the side panel and shows the products in 4 columns;
+"Filters" brings it back. Each visitor's choice is remembered. On phones the button opens
+the full-screen filter panel as before.
+
 Type, Fabric, Price and Show are collapsible. Type starts open; a group opens by itself
 and shows a count badge when something in it is picked.
