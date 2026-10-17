@@ -36,6 +36,12 @@ Products can be in one Catalogue tab or in one tab per category (Sarees, Salwar 
 Kurtis & Gowns, ...), all with the same columns. Add every product tab's gid to
 `SHEET_TABS`; the site merges them. A Product Code found in two tabs is shown once.
 
+## Descriptions
+
+Write each point on its own line in the cell (Ctrl+Enter on Windows, Cmd+Enter on Mac). The first
+line is shown in bold; a short line followed by points ("Size", "Material and care") becomes a heading;
+"Label - value" lines show as **Label:** value. A *, - or • at the start of a line is optional.
+
 ## Sheet columns the site reads
 
 Product Code, Category, Sub-category, Product Name, Fabric, Colours, Sizes, Price,

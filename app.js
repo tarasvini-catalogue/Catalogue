@@ -40,6 +40,23 @@ const pri=p=>p.sold?9:p.isnew?0:p.feat?1:p.homecoll?2:p.imgs.length?3:4;
 const colInfo=v=>{v=String(v||"").trim();if(/^\d+$/.test(v))return{colours:+v,cnames:[]};const n=v.split(/[,;\/|]+/).map(x=>x.trim()).filter(Boolean);return{colours:n.length,cnames:n}};
 const cols=p=>p.colours>3?"More colours":p.cnames.length>1?p.cnames.join(", "):p.colours>1?p.colours+" colours":"";
 const and=a=>a.length>1?a.slice(0,-1).join(", ")+" and "+a[a.length-1]:a.join("");
+// Description: keeps line breaks; "*", "-" or "•" lines become bullets; a short line before a group
+// of lines becomes a small heading ("Size", "Material and care"); "Bust - 38"" shows as "Bust: 38"".
+function descHTML(t){
+  let lines=String(t).replace(/\r/g,"").split("\n").map(x=>x.trim()).filter(Boolean);
+  if(lines.length===1&&/\s[•*]\s/.test(lines[0]))lines=lines[0].split(/\s(?=[•*]\s)/).map(x=>x.trim());
+  const bul=x=>/^[*•\-–]\s*/.test(x),strip=x=>x.replace(/^[*•\-–]\s*/,"");
+  const kv=x=>{const m=x.match(/^(.{2,32}?)\s+[-–:]\s+(.+)$/);return m?`<b>${esc(m[1])}:</b> ${esc(m[2])}`:esc(x)};
+  const isKV=x=>/^.{2,32}?\s+[-–:]\s+.+$/.test(strip(x));
+  const head=(x,i)=>i>0&&i+1<lines.length&&!bul(x)&&x.length<=32&&!/[.:]$/.test(x)&&!isKV(x)&&(bul(lines[i+1])||isKV(lines[i+1]));
+  let html="",list=false;const close=()=>{if(list){html+="</ul>";list=false}};
+  lines.forEach((x,i)=>{
+    if(i===0&&!bul(x)){html+=`<p class="lead">${esc(x)}</p>`;return}
+    if(head(x,i)){close();html+=`<h5>${esc(x)}</h5>`;return}
+    if(lines.length===1){html+=`<p>${esc(x)}</p>`;return}
+    if(!list){html+="<ul>";list=true}
+    html+=`<li>${kv(strip(x))}</li>`});
+  close();return html}
 function colHTML(p){
   if(p.colours<2&&!p.cnames.length)return "";
   const q=encodeURIComponent(prodMsg(p,"Hi Tarasvini, please share all the colours of:"));
@@ -328,7 +345,7 @@ function openDlg(id){
   <div class="body">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<h2>${esc(p.name)}</h2><div class="price">${priceHTML(p)}</div>${(o=>o?`<p class="offerline"><b>${esc(o.headline)}</b><span>${esc(offerLine(o))}. Applied when we confirm your order on WhatsApp.</span></p>`:"")(offerFor(p))}
     ${sizes.length?`<div class="opt"><h4>Sizes</h4><div class="sizes">${sizes.map(s=>`<span>${esc(s)}</span>`).join("")}</div></div>`:""}
     ${colHTML(p)}
-    ${p.description?`<p class="desc">${esc(p.description)}</p>`:""}
+    ${p.description?`<div class="desc">${descHTML(p.description)}</div>`:""}
     <dl><dt>Code</dt><dd>${esc(p.id)}</dd>
     ${p.fabric_group?`<dt>Fabric</dt><dd>${esc(p.fabric_group)}</dd>`:""}
     ${p.occ.length?`<dt>Occasion</dt><dd>${esc(p.occ.join(", "))}</dd>`:""}
