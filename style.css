@@ -438,3 +438,7 @@ dialog#guide:focus{outline:none}
 .hctl .hnav{background:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(36,24,12,.12)}
 .hdots button{background:rgba(36,24,12,.18)}
 @media(max-width:900px){.htext:before{left:50%;width:220px;height:220px;transform:translate(-50%,-55%)}}
+
+/* live offer line in the product window */
+.offerline{margin:12px 0 4px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,#FDE3EA,#FFF1DC);border-left:4px solid var(--rani,#B0185A);font-size:14.5px;line-height:1.45}
+.offerline b{display:block;color:var(--rani,#B0185A);font-size:15px;margin-bottom:2px}

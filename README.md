@@ -72,6 +72,18 @@ and today is within the dates (empty dates = no limit). Several live rows rotate
 Button Link: a category name, WhatsApp, Instagram (opens a DM), Instagram page, a product code, or a full URL.
 Colour: Red, Pink, Teal, Gold, Brown, or a #hex value.
 
+Offer codes (optional columns on the Offers tab): Offer Code, Discount, Min Order, Full Price Only.
+While a row with an Offer Code is live, eligible products show the offer in their window and
+the WhatsApp/Instagram order message gets a line "Offer: CODE (10% off)". Full Price Only = Yes
+leaves out products with a Sale Price. The discount itself is applied when the order is confirmed.
+Everything stops automatically after the End Date (midnight).
+
+## Product order
+
+Default order ("Sort: new & featured"): New Arrival, then Featured, then products with a
+Home Collection name, then products with photos, then the rest. Sold-out items go last.
+The same order picks the photos for the collage and the occasion circles.
+
 ## Featured carousel and paging
 
 The carousel above the catalogue follows the selected category: its Featured

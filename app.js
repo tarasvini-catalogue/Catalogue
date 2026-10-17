@@ -35,6 +35,8 @@ const CAT=()=>CATS.find(c=>c[0]===state.cat);
 const label=()=>CAT()[1];
 const many=n=>n+" "+(n===1?CAT()[2]:CAT()[3]);
 // Colours: a number (6) or colour names (Red, Blue, Green). At most 3 are shown; with more, customers are asked to DM.
+// Default order everywhere: New Arrival, Featured, Home Collection ("premium" collections), products with photos, the rest; sold out last
+const pri=p=>p.sold?9:p.isnew?0:p.feat?1:p.homecoll?2:p.imgs.length?3:4;
 const colInfo=v=>{v=String(v||"").trim();if(/^\d+$/.test(v))return{colours:+v,cnames:[]};const n=v.split(/[,;\/|]+/).map(x=>x.trim()).filter(Boolean);return{colours:n.length,cnames:n}};
 const cols=p=>p.colours>3?"More colours":p.cnames.length>1?p.cnames.join(", "):p.colours>1?p.colours+" colours":"";
 const and=a=>a.length>1?a.slice(0,-1).join(", ")+" and "+a[a.length-1]:a.join("");
@@ -71,7 +73,7 @@ const inr=n=>"₹"+n.toLocaleString("en-IN");
 // Product message for WhatsApp and Instagram. The photo link goes first so WhatsApp shows a picture preview.
 const itemURL=p=>location.origin+location.pathname.replace(/[^/]*$/,"")+"?item="+encodeURIComponent(p.id);
 const prodMsg=(p,intro,end)=>[/^https?:/.test(p.imgs[0]||"")?p.imgs[0]:"",intro,p.name,"Code: "+p.id,
-  p.price?"Price: "+inr(p.price)+(p.was?" (sale price, was "+inr(p.was)+")":""):"",p.colours>1?"Colour: ":"",p.sizes?"Size: ":"","Link: "+itemURL(p),end||""].filter(Boolean).join("\n");
+  p.price?"Price: "+inr(p.price)+(p.was?" (sale price, was "+inr(p.was)+")":""):"",p.colours>1?"Colour: ":"",p.sizes?"Size: ":"",(o=>o?"Offer: "+o.offer_code+(pctText(o.discount)?" ("+pctText(o.discount)+" off)":""):"")(offerFor(p)),"Link: "+itemURL(p),end||""].filter(Boolean).join("\n");
 const waLink=p=>"https://wa.me/"+WA+"?text="+encodeURIComponent(
   p?prodMsg(p,"Hi Tarasvini, I'd like to order:","Please confirm availability and delivery.")
    :"Hi Tarasvini, I'd like to know more about your products.");
@@ -109,9 +111,21 @@ function readCatalogue(){
     if(hasShow&&recs.some(o=>yes(o.show)))recs=recs.filter(o=>yes(o.show));
     setCats(recs);return recs});
 }
+// Live offers: Show = Yes and today between Start Date and End Date (end date counts until midnight)
+let OFFERS=[];
+const offersReady=findTab(h=>h.includes("headline")).then(t=>{if(!t)return [];
+  const rows=parseCSV(t),head=(rows[0]||[]).map(hkey),now=new Date();
+  return OFFERS=rows.slice(1).map(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());return o})
+    .filter(o=>o.headline&&yes(o.show)).filter(o=>{const a=pdate(o.start_date),b=pdate(o.end_date,true);return(!a||a<=now)&&(!b||now<=b)});
+}).catch(()=>[]);
+// Offer with a code (Offers tab: Offer Code, Discount, Min Order, Full Price Only) that applies to this product
+const pctText=v=>{v=String(v||"").trim();if(!v)return "";if(/^\d*\.\d+$/.test(v)&&+v<1)return Math.round(+v*100)+"%";if(/^\d+(\.\d+)?$/.test(v))return v+"%";return v};
+function offerFor(p){return OFFERS.find(o=>o.offer_code&&!(yes(o.full_price_only)&&p.onsale))}
+function offerLine(o){const d=pctText(o.discount),m=num(o.min_order),e=pdate(o.end_date,true);
+  return [d?d+" off":"Special offer",m?"orders above "+inr(m):"",e?"till "+e.toLocaleDateString("en-IN",{day:"numeric",month:"short"}):""].filter(Boolean).join(" ")}
 const catsReady=$("#grid")?null:readCatalogue().catch(()=>{});
 function load(){
-  readCatalogue().then(recs=>{
+  Promise.all([readCatalogue(),offersReady]).then(([recs])=>{
     state.all=recs.map((o,i)=>({...o,i,category:catKey(o.category),...colInfo(o.colours),
         ...(()=>{const mrp=num(o.price),sp=num(o.sale);return sp>0&&sp<mrp?{price:sp,was:mrp,onsale:true}:{price:mrp,was:0,onsale:false}})(),
         coll:(c=>c===c.toLowerCase()?title(c):c)(String(o.collection||"").replace(/\s+/g," ").trim()),
@@ -182,7 +196,7 @@ function buildHero(){
   if(!list.length){box.closest(".hero").hidden=true;return}
   const catOf=c=>{const n={};c.items.forEach(p=>n[p.category]=(n[p.category]||0)+1);return Object.keys(n).sort((a,b)=>n[b]-n[a])[0]};
   box.innerHTML=list.map((c,i)=>{
-    const its=c.items.slice().sort((a,b)=>(b.feat-a.feat)||(b.isnew-a.isnew)||(b.imgs.length>0)-(a.imgs.length>0)).slice(0,4);
+    const its=c.items.slice().sort((a,b)=>pri(a)-pri(b)||(a.i-b.i)).slice(0,4);
     const k=catOf(c),cl=CATS.find(x=>x[0]===k)||CATS[0],pr=c.items.map(p=>p.price).filter(Boolean);
     return `<div class="hslide"${i?" hidden":""} role="group" aria-roledescription="slide" aria-label="${i+1} of ${list.length}: ${esc(c.name)}">
       <div class="htext"><p class="hcat">${esc(cl[1])}</p><h1>${esc(c.name)}</h1>
@@ -220,7 +234,7 @@ const occTile=(v,label,n,c,ic,img)=>`<button class="occ" type="button" data-occ=
 // Photo for an occasion circle: a product from this category and occasion that has a photo,
 // Featured and New Arrival first, avoiding a photo already used by another circle.
 function occPhoto(items,used){
-  const c=items.filter(p=>p.imgs.length&&!p.sold).sort((a,b)=>(b.feat-a.feat)||(b.isnew-a.isnew)||(a.i-b.i));
+  const c=items.filter(p=>p.imgs.length&&!p.sold).sort((a,b)=>pri(a)-pri(b)||(a.i-b.i));
   const p=c.find(p=>!used.has(p.id))||c[0];if(!p)return "";used.add(p.id);return p.imgs[0];
 }
 const sel={type:new Set(),fab:new Set(),occ:new Set(),price:"",home:""};
@@ -264,7 +278,7 @@ function render(keep){
   }
   const qv=$("#q").value.trim(), q=qv.toLowerCase(), stock=$("#stock").checked, nw=$("#newonly").checked, so=$("#saleonly").checked, sort=$("#sort").value;
   let list=state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!sel.occ.size||p.occ.some(o=>sel.occ.has(o)))&&(!sel.home||p.homecoll.toLowerCase()===sel.home.toLowerCase())&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)&&(!q||hit(p,q)));
-  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(b.feat-a.feat)||(b.isnew-a.isnew)||(a.sold-b.sold)||(a.i-b.i));
+  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:pri(a)-pri(b)||(a.i-b.i));
   // chips for what is selected
   const chips=[...(sel.home?[["home","","Collection: "+sel.home]]:[]),...[...sel.occ].map(v=>["occ",v,v]),...[...sel.type].map(v=>["type",v,v]),...[...sel.fab].map(v=>["fab",v,v])];
   if(sel.price)chips.push(["price","",PRICES.find(x=>x[0]===sel.price)[1]]);
@@ -311,7 +325,7 @@ function openDlg(id){
   d.innerHTML=`<button class="x" type="button" aria-label="Close" onclick="this.closest('dialog').close()">×</button>
   <div class="dg"><div class="gal">${ph(p,true,0)}
     ${imgs.length>1?`<button class="gnav gprev" type="button" aria-label="Previous photo">&#8249;</button><button class="gnav gnext" type="button" aria-label="Next photo">&#8250;</button><div class="thumbs">${imgs.map((u,i)=>`<button type="button" data-i="${i}" aria-label="Photo ${i+1}"><img src="${esc(u)}" alt=""></button>`).join("")}</div>`:""}</div>
-  <div class="body">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<h2>${esc(p.name)}</h2><div class="price">${priceHTML(p)}</div>
+  <div class="body">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<h2>${esc(p.name)}</h2><div class="price">${priceHTML(p)}</div>${(o=>o?`<p class="offerline"><b>${esc(o.headline)}</b><span>${esc(offerLine(o))}. Applied when we confirm your order on WhatsApp.</span></p>`:"")(offerFor(p))}
     ${sizes.length?`<div class="opt"><h4>Sizes</h4><div class="sizes">${sizes.map(s=>`<span>${esc(s)}</span>`).join("")}</div></div>`:""}
     ${colHTML(p)}
     ${p.description?`<p class="desc">${esc(p.description)}</p>`:""}
@@ -485,10 +499,7 @@ function offerLink(o){const l=String(o.button_link||"").trim(),k=l.toLowerCase()
   return["index.html?item="+encodeURIComponent(l),false]}
 function loadOffers(){
   const box=$("#offers");if(!box)return;
-  Promise.all([findTab(h=>h.includes("headline")),catsReady]).then(([t])=>{if(!t)return;
-    const rows=parseCSV(t),head=(rows[0]||[]).map(hkey),now=new Date();
-    const list=rows.slice(1).map(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());return o})
-      .filter(o=>o.headline&&yes(o.show)).filter(o=>{const a=pdate(o.start_date),b=pdate(o.end_date,true);return(!a||a<=now)&&(!b||now<=b)});
+  Promise.all([offersReady,catsReady]).then(([list])=>{if(!list.length)return;const now=new Date();
     let key="";try{key=list.map(o=>o.headline).join("|");if(sessionStorage.getItem("offerClosed")===key)return}catch(e){}
     if(!list.length)return;
     const fmt=d=>d.toLocaleDateString("en-IN",{day:"numeric",month:"short"});
