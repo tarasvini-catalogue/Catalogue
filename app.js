@@ -590,7 +590,7 @@ function openGuide(){
   if(location.hash==="#how-to-order"){openGuide();return}
   let seen=false;try{seen=!!localStorage.getItem("guideSeen")}catch(e){seen=true}
   // first visit only; never on top of a shared product link
-  if(!seen&&!new URLSearchParams(location.search).get("item"))setTimeout(()=>{const p=$("#dlg");if(!(p&&p.open))openGuide()},2000);
+  if(!seen&&!new URLSearchParams(location.search).get("item")&&!document.querySelector(".pdp"))setTimeout(()=>{const p=$("#dlg");if(!(p&&p.open))openGuide()},2000);
 })();
 
 if($("#fpanel"))$("#fpanel").addEventListener("change",()=>setTimeout(groupCounts));

@@ -138,3 +138,19 @@ the full-screen filter panel as before.
 
 Type, Fabric, Price and Show are collapsible. Type starts open; a group opens by itself
 and shows a count badge when something in it is picked.
+
+## Product pages, category pages and Google Shopping feed
+
+On every deploy Netlify runs `build/generate.mjs` (set in `netlify.toml`). It reads the same
+Google Sheet and creates:
+
+- `p/<product-name>-<code>.html`: one page per product, so Google can show each product in search
+- `sarees.html`, `salwar-suits.html`, ...: one page per category
+- `sitemap.xml`: every page, for Google Search Console
+- `feed.xml`: product feed for Google Merchant Center (free Shopping listings)
+
+These files are made on Netlify, so they are not in this repo. The home page catalogue stays
+live from the sheet; product pages and the feed update on the next deploy: any upload to
+GitHub, **Deploys > Trigger deploy** in Netlify, or the automatic weekly rebuild
+(`netlify/functions/weekly-rebuild.mjs`, needs the `BUILD_HOOK_URL` environment variable).
+If the sheet cannot be read, the build uses `catalogue-backup.csv`.
