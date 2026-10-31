@@ -302,6 +302,14 @@ collNames.forEach(n => writeFileSync("collections/" + collSlug(n) + ".html", col
 writeFileSync("collection.html", page({ path: "/collection.html", title: "Collection | Tarasvini", desc: "A Tarasvini collection.", image: "",
   body: `<nav class="crumbs wrap" aria-label="Breadcrumb"></nav><section class="pagehead"><div class="wrap"><h1>Collection</h1><div class="zari" aria-hidden="true"></div></div></section><section class="wrap shop catpage collpage"><p class="count">Loading…</p></section>` })
   .replace("<head>", '<head>\n<meta name="robots" content="noindex">').replace(/\n<link rel="canonical"[^>]*>/, ""));
+// New arrivals page: every product marked New Arrival, all categories (refreshed live by app.js)
+const fresh = items.filter(p => p.isnew).sort(order);
+writeFileSync("new-arrivals.html", page({ path: "/new-arrivals.html", title: `New Arrivals | ${BRAND}, Chennai | Sarees, Salwars, Kurtis`,
+  desc: `The latest arrivals at ${BRAND}: new sarees, salwars, anarkalis and kurtis. Free shipping across India, order on WhatsApp.`,
+  image: pic(fresh.find(p => p.imgs.length)?.imgs[0], 1200),
+  body: `${crumbs([["Home", "/"], ["New arrivals", "/new-arrivals.html"]])}<section class="pagehead"><div class="wrap"><h1>New arrivals</h1><div class="zari" aria-hidden="true"></div></div></section>
+<section class="wrap shop catpage newpage"><p class="catintro">${fresh.length} new ${fresh.length === 1 ? "style" : "styles"} just arrived.</p><div class="grid">${fresh.map(p => card(p, cats)).join("")}</div></section>`,
+  schema: [crumbLD([["Home", "/"], ["New arrivals", "/new-arrivals.html"]])] }));
 // Saved copy of the sheet for instant loading (snapshot.json). Only the columns the website uses
 // are kept. Made only when the live sheet was read, so it is never older than the backup file.
 const KEEP = new Set(["id", "name", "category", "collection", "fabric_group", "colours", "sizes", "price", "sale", "delivery", "available", "featured", "image_url",
@@ -313,7 +321,7 @@ const slim = t => { if (!t) return ""; const rows = parseCSV(t); const keep = (r
 if (source === "Google Sheet") writeFileSync("snapshot.json", JSON.stringify({ built: new Date().toISOString(), tabs: Object.fromEntries(SHEET_TABS.map((g, i) => [g, slim(raw[i])])) }));
 else if (existsSync("snapshot.json")) rmSync("snapshot.json");
 const today = new Date().toISOString().slice(0, 10);
-const urls = [["/", today], ...present.map(c => ["/" + catSlug(c) + ".html", today]), ["/reviews.html"], ["/contact.html"], ["/shipping-returns.html"], ["/privacy.html"], ...collNames.map(n => ["/collections/" + collSlug(n) + ".html", today]), ...items.map(p => ["/p/" + p.slug + ".html"])];
+const urls = [["/", today], ...present.map(c => ["/" + catSlug(c) + ".html", today]), ["/reviews.html"], ["/contact.html"], ["/shipping-returns.html"], ["/privacy.html"], ["/new-arrivals.html", today], ...collNames.map(n => ["/collections/" + collSlug(n) + ".html", today]), ...items.map(p => ["/p/" + p.slug + ".html"])];
 writeFileSync("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map(([u, d]) => `  <url><loc>${SITE}${u}</loc>${d ? `<lastmod>${d}</lastmod>` : ""}</url>`).join("\n")}

@@ -232,3 +232,13 @@ shown by collection.html until the next deploy.
   Console and Google Merchant Center: https://www.tarasvini.com/sitemap.xml and /feed.xml.
 - Visitor statistics: Cloudflare Web Analytics (free, no cookies). Put its token in Netlify >
   Site configuration > Environment variables as CF_BEACON_TOKEN and deploy again.
+
+
+## Search and New arrivals
+
+- The search box looks through every category at once (name, code, type, fabric, category,
+  collection, occasion, colours and description; every word must match). Results show how many
+  are in each category. Choosing a category from the menu ends the search.
+- /new-arrivals.html lists every product with New Arrival = Yes, from all categories, with buttons
+  to narrow it by category. "New arrivals" appears first in the menu (and in the footer) whenever
+  at least one product is marked New Arrival. The list is read live from the sheet.

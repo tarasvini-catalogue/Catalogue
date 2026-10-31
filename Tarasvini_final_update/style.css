@@ -575,3 +575,18 @@ dialog#zoom::backdrop{background:#111}
 footer .fcoll a{display:block}
 @media(min-width:1101px){.fgrid:has(.fcoll){grid-template-columns:1.3fr 1fr 1fr 1fr 1.3fr}}
 .results{min-width:0}
+/* ---------- search across all categories, new arrivals link ---------- */
+body.searching #occrow,body.searching #feat,body.searching #g-type,body.searching #g-fab{display:none!important}
+.nav .navnew{color:var(--rani);font-weight:700}
+.nav .navnew:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--rani);margin-right:7px;vertical-align:middle;position:relative;top:-1px}
+.newpage .pchips{margin-bottom:18px}
+/* recently viewed: a compact strip of small cards */
+section.feat.rv{padding-top:28px}
+.rv .fhead h2{font-size:22px}
+.rv .ftrack,.rv .rvtrack{grid-auto-columns:150px!important;gap:14px!important}
+.rv .card .heart,.rv .card .tags,.rv .card .cnt,.rv .card .ty,.rv .card .cols{display:none}
+.rv .card .info{padding:8px 0 4px}
+.rv .card h3{font-size:13.5px;-webkit-line-clamp:1}
+.rv .card .price{font-size:14.5px}
+.rv .card .was,.rv .card .off{display:none}
+@media(max-width:700px){.rv .ftrack,.rv .rvtrack{grid-auto-columns:118px!important;gap:10px!important}section.feat.rv{padding-top:20px}.rv .fhead h2{font-size:20px}}

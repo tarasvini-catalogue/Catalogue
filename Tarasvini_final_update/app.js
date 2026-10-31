@@ -20,12 +20,15 @@ const KNOWN=[["Saree","Sarees","saree","sarees"],["Salwar","Salwars & Anarkalis"
 let CATS=KNOWN.slice(0,4);
 const catInfo=v=>{v=String(v||"").replace(/\s+/g," ").trim();const k=v.toLowerCase(),kn=KNOWN.find(c=>c.some(x=>x.toLowerCase()===k)||c[0].toLowerCase()+"s"===k||(c[0]==="Cord-set"&&/^co-?ord|^cord ?sets?$/.test(k)));if(kn)return kn;
   const t=v===k?title(v):v,pl=/s$/i.test(t)?t:t+"s";return[t,pl,t.toLowerCase(),pl.toLowerCase()]};
-function setCats(recs){const out=[];recs.forEach(o=>{const c=catInfo(o.category);if(c[0]&&!out.some(x=>x[0].toLowerCase()===c[0].toLowerCase()))out.push(c)});if(out.length)CATS=out;buildNav()}
+let HASNEW=false;
+function setCats(recs){HASNEW=recs.some(o=>yes(o.isnew));const out=[];recs.forEach(o=>{const c=catInfo(o.category);if(c[0]&&!out.some(x=>x[0].toLowerCase()===c[0].toLowerCase()))out.push(c)});if(out.length)CATS=out;buildNav()}
 function buildNav(){
   const nav=document.querySelector(".nav");if(nav){nav.querySelectorAll("a[data-cat]").forEach(a=>a.remove());const sep=nav.querySelector(".sep");
-    CATS.forEach(c=>{const a=document.createElement("a");a.href="index.html?cat="+encodeURIComponent(c[0]);a.dataset.cat=c[0];a.textContent=c[1];if(c[0]===state.cat&&$("#grid"))a.setAttribute("aria-current","true");nav.insertBefore(a,sep)})}
+    CATS.forEach(c=>{const a=document.createElement("a");a.href="index.html?cat="+encodeURIComponent(c[0]);a.dataset.cat=c[0];a.textContent=c[1];if(c[0]===state.cat&&$("#grid"))a.setAttribute("aria-current","true");nav.insertBefore(a,sep)});
+    let nl=nav.querySelector(".navnew");if(HASNEW&&!nl){nl=document.createElement("a");nl.className="navnew";nl.href="/new-arrivals.html";nl.textContent="New arrivals";if(document.querySelector(".newpage"))nl.setAttribute("aria-current","true");nav.insertBefore(nl,nav.firstChild)}
+    if(nl&&!HASNEW)nl.remove()}
   const h=[...document.querySelectorAll("footer h3")].find(x=>x.textContent.trim()==="Shop");
-  if(h){const d=h.parentNode;d.querySelectorAll("a").forEach(a=>a.remove());CATS.forEach(c=>{const a=document.createElement("a");a.href="index.html?cat="+encodeURIComponent(c[0]);a.textContent=c[1];d.appendChild(a)})}
+  if(h){const d=h.parentNode;d.querySelectorAll("a").forEach(a=>a.remove());if(HASNEW){const a=document.createElement("a");a.href="/new-arrivals.html";a.textContent="New arrivals";d.appendChild(a)}CATS.forEach(c=>{const a=document.createElement("a");a.href="index.html?cat="+encodeURIComponent(c[0]);a.textContent=c[1];d.appendChild(a)})}
 }
 // Sheet headings the site understands (any capitals, spaces or dashes): heading -> internal name
 const ALIAS={home_collection:"homecoll",homepage_collection:"homecoll",highlight:"homecoll",occasion:"occ",occasions:"occ",occasion_wear:"occ",wear:"occ",sale_price:"sale",offer_price:"sale",discount_price:"sale",show_on_website:"show",show_on_site:"show",show:"show",on_website:"show",website:"show",new_arrival:"isnew",new_arrivals:"isnew",new:"isnew",product_code:"id",code:"id",model_no:"id",product_name:"name",sub_category:"collection",subcategory:"collection",type:"collection",fabric:"fabric_group",colours:"colours",colors:"colours",number_of_colours:"colours",selling_price:"price",availability:"available",photo_1:"image_url",photo_2:"image_url_2",photo_3:"image_url_3",video:"video_url"};
@@ -264,7 +267,7 @@ function buildHero(){
   box.addEventListener("click",e=>{const b=e.target.closest("[data-hcat]");if(!b)return;setCat(b.dataset.hcat,true);if(b.dataset.hcoll)sel.type.add(b.dataset.hcoll);if(b.dataset.hhome)sel.home=b.dataset.hhome;if(b.dataset.hcoll||b.dataset.hhome){syncPanel();render()}});
 }
 function setCat(k,scroll){
-  state.cat=k;resetSel();
+  state.cat=k;resetSel();if(scroll&&$("#q").value){$("#q").value="";try{const u=new URL(location.href);u.searchParams.delete("q");history.replaceState(null,"",u)}catch(e){}}
   document.querySelectorAll(".nav a[data-cat]").forEach(a=>a.setAttribute("aria-current",a.dataset.cat===k?"true":"false"));
   try{const u=new URL(location.href);u.searchParams.set("cat",k);u.searchParams.delete("item");history.replaceState(null,"",u)}catch(e){}
   buildFilters();
@@ -318,24 +321,33 @@ function buildFilters(){
   $("#o-price").innerHTML=PRICES.map(([v,l])=>`<label class="fopt"><input type="radio" name="price" value="${v}"${sel.price===v?" checked":""}><span>${l}</span></label>`).join("");
   render();
 }
-const hit=(p,q)=>(p.name+" "+p.id+" "+p.coll+" "+p.fabric_group).toLowerCase().includes(q);
+// Search looks at name, code, type, fabric, category, collection, occasion, colours and description;
+// every word must match ("silk saree", "red anarkali"). Plurals match too (sarees = saree).
+const hay=p=>p._h||(p._h=[p.name,p.id,p.coll,p.fabric_group,p.homecoll,(CATS.find(c=>c[0]===p.category)||[])[1],p.category,p.occ.join(" "),p.cnames.join(" "),p.description].join(" ").toLowerCase());
+const words=q=>q.toLowerCase().split(/[\s,]+/).filter(Boolean).map(w=>w.length>3?w.replace(/(es|s)$/,""):w);
+const hit=(p,q)=>words(q).every(w=>hay(p).includes(w));
+const nameHit=(p,q)=>words(q).every(w=>(p.name+" "+p.id).toLowerCase().includes(w));
 function priceOK(p){if(!sel.price)return true;const [a,b]=sel.price.split("-");return p.price>=(+a||0)&&(!b||p.price<=+b)}
 const FIRST=20, MORE=10;
 function render(keep){
   if(!keep)state.shown=FIRST;
-  if(!inCat().length){
+  const searching=!!$("#q").value.trim();
+  document.body.classList.toggle("searching",searching);
+  document.querySelectorAll(".nav a[data-cat]").forEach(a=>a.setAttribute("aria-current",!searching&&a.dataset.cat===state.cat?"true":"false"));
+  if(!inCat().length&&!searching){
     $("#count").textContent="Coming soon";$("#active").innerHTML="";
     $("#grid").innerHTML=`<div class="empty"><p>We are adding ${label().toLowerCase()} to the catalogue. Ask us on WhatsApp what is available now.</p><a class="btn wa" href="https://wa.me/${WA}?text=${encodeURIComponent("Hi Tarasvini, do you have "+label().toLowerCase()+" available?")}" target="_blank" rel="noopener">${IC.wa}Ask on WhatsApp</a></div>`;
     return;
   }
   const qv=$("#q").value.trim(), q=qv.toLowerCase(), stock=$("#stock").checked, nw=$("#newonly").checked, so=$("#saleonly").checked, sort=$("#sort").value;
-  let list=state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!sel.occ.size||p.occ.some(o=>sel.occ.has(o)))&&(!sel.home||p.homecoll.toLowerCase()===sel.home.toLowerCase())&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)&&(!q||hit(p,q)));
-  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:pri(a)-pri(b)||(a.i-b.i));
+  // searching: every category; the category filters (type, fabric, occasion) are set aside
+  let list=searching?state.all.filter(p=>hit(p,q)&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)):state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!sel.occ.size||p.occ.some(o=>sel.occ.has(o)))&&(!sel.home||p.homecoll.toLowerCase()===sel.home.toLowerCase())&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)&&(!q||hit(p,q)));
+  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(searching?nameHit(b,q)-nameHit(a,q):0)||pri(a)-pri(b)||(a.i-b.i));
   // chips for what is selected
-  const chips=[...(sel.home?[["home","","Collection: "+sel.home]]:[]),...[...sel.occ].map(v=>["occ",v,v]),...[...sel.type].map(v=>["type",v,v]),...[...sel.fab].map(v=>["fab",v,v])];
+  const chips=searching?[]:[...(sel.home?[["home","","Collection: "+sel.home]]:[]),...[...sel.occ].map(v=>["occ",v,v]),...[...sel.type].map(v=>["type",v,v]),...[...sel.fab].map(v=>["fab",v,v])];
   if(sel.price)chips.push(["price","",(PRICES.concat(QUICK).find(x=>x[0]===sel.price)||["","Price"])[1]]);
   // quick price buttons above the products (only bands that have products in this category)
-  const pq=$("#pchips");if(pq){const base=inCat().filter(x=>!x.sold||!stock),bands=QUICK.map(([v,l])=>[v,l,base.filter(x=>{const [a,b]=v.split("-");return x.price>=(+a||0)&&(!b||x.price<=+b)}).length]).filter(x=>x[2]);
+  const pq=$("#pchips");if(pq){const base=(searching?state.all.filter(x=>hit(x,q)):inCat()).filter(x=>!x.sold||!stock),bands=QUICK.map(([v,l])=>[v,l,base.filter(x=>{const [a,b]=v.split("-");return x.price>=(+a||0)&&(!b||x.price<=+b)}).length]).filter(x=>x[2]);
     pq.innerHTML=bands.length>1?bands.map(([v,l,n])=>`<button class="pchip" type="button" data-pq="${v}" aria-pressed="${sel.price===v}">${l}<small>${n}</small></button>`).join(""):"";pq.hidden=bands.length<2}
   if(nw)chips.push(["newonly","","New arrivals"]);
   if(so)chips.push(["saleonly","","On sale"]);
@@ -345,12 +357,16 @@ function render(keep){
   const n=(sel.home?1:0)+sel.occ.size+sel.type.size+sel.fab.size+(sel.price?1:0)+(stock?1:0)+(nw?1:0)+(so?1:0);
   $("#fcount").textContent=n||"";
   document.querySelectorAll("#occrow .occ").forEach(b=>b.setAttribute("aria-pressed",b.dataset.occ?String(sel.occ.size===1&&sel.occ.has(b.dataset.occ)):String(!sel.occ.size)));
-  $("#fdone").textContent=list.length?`Show ${many(list.length)}`:"No matches";
-  $("#count").textContent=q?`${many(list.length)} matching “${qv}”`:many(list.length);
+  const res=n=>n+(n===1?" result":" results");
+  $("#fdone").textContent=list.length?`Show ${searching?res(list.length):many(list.length)}`:"No matches";
+  $("#shoph").textContent=searching?"Search results":label();
+  if(searching){const by=present().map(c=>[c,list.filter(p=>p.category===c[0]).length]).filter(x=>x[1]);
+    $("#count").textContent=`${res(list.length)} for “${qv}”`+(by.length>1?" · "+by.map(([c,n])=>c[1]+" "+n).join(" · "):"")}
+  else $("#count").textContent=many(list.length);
   state.list=list;
   const left=Math.max(0,list.length-state.shown);
   $("#more").hidden=!left;$("#more").textContent=`Show ${Math.min(MORE,left)} more (${left} left)`;
-  $("#grid").innerHTML=list.length?list.slice(0,state.shown).map(cardHTML).join(""):`<div class="empty"><p>No ${CAT()[3]} match ${q?"“"+esc(qv)+"”":"these filters"}.</p>${q?present().filter(c=>c[0]!==state.cat).map(c=>[c,state.all.filter(p=>p.category===c[0]&&hit(p,q)).length]).filter(x=>x[1]).map(([c,n])=>`<button class="btn" type="button" data-cat="${c[0]}">See ${n} in ${esc(c[1])}</button> `).join(""):""}<button class="btn" type="button" onclick="clearFilters()">Clear filters</button></div>`;
+  $("#grid").innerHTML=list.length?list.slice(0,state.shown).map(cardHTML).join(""):searching?`<div class="empty"><p>Nothing matches “${esc(qv)}”. Try another word, or ask us: we may have it.</p><a class="btn wa" href="https://wa.me/${WA}?text=${encodeURIComponent("Hi Tarasvini, do you have: "+qv+"?")}" target="_blank" rel="noopener">${IC.wa}Ask on WhatsApp</a> <button class="btn" type="button" onclick="clearFilters()">Clear search</button></div>`:`<div class="empty"><p>No ${CAT()[3]} match ${q?"“"+esc(qv)+"”":"these filters"}.</p>${q?present().filter(c=>c[0]!==state.cat).map(c=>[c,state.all.filter(p=>p.category===c[0]&&hit(p,q)).length]).filter(x=>x[1]).map(([c,n])=>`<button class="btn" type="button" data-cat="${c[0]}">See ${n} in ${esc(c[1])}</button> `).join(""):""}<button class="btn" type="button" onclick="clearFilters()">Clear filters</button></div>`;
 }
 // Collapsible filter groups: show how many are picked in each heading; open a group that has a choice
 function groupCounts(){document.querySelectorAll("#fpanel details.fgrp").forEach(d=>{const n=d.querySelectorAll("input:checked:not([value=''])").length;
@@ -536,7 +552,8 @@ document.addEventListener("click",e=>{
 
 if($("#grid")){
   $("#sort").addEventListener("change",()=>render());
-  $("#q").addEventListener("input",()=>render());
+  let wasEmpty=!$("#q").value.trim();
+  $("#q").addEventListener("input",()=>{const v=$("#q").value.trim();if(v&&wasEmpty){const sh=document.getElementById("shop");if(sh.getBoundingClientRect().top>innerHeight*.6)sh.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})}wasEmpty=!v;render();try{const u=new URL(location.href),v=$("#q").value.trim();if(v)u.searchParams.set("q",v);else u.searchParams.delete("q");history.replaceState(null,"",u)}catch(e){}});
   $("#fpanel").addEventListener("change",e=>{const t=e.target;
     if(t.dataset.f){sel[t.dataset.f][t.checked?"add":"delete"](t.value)}else if(t.name==="price")sel.price=t.value;
     render()});
@@ -650,7 +667,7 @@ if($("#fpanel"))$("#fpanel").addEventListener("change",()=>setTimeout(groupCount
 // These pages are created on each deploy, so their prices can be out of date. When a page opens,
 // the latest price, sale price, Sold out and offer are read from the Google Sheet and put on the page.
 // If the sheet cannot be reached (saved copy in use), the page is left as it was built.
-if(!$("#grid")&&catsReady)catsReady.then(recs=>{if(!recs||!recs.length)return;if(!state.all.length)state.all=recs.map(norm);collFooter();collPage();if(!document.querySelector(".pdp"))return;rvShow()}).catch(()=>{});
+if(!$("#grid")&&catsReady)catsReady.then(recs=>{if(!recs||!recs.length)return;if(!state.all.length)state.all=recs.map(norm);collFooter();collPage();newPage();if(!document.querySelector(".pdp"))return;rvShow()}).catch(()=>{});
 if(!$("#grid")&&catsReady&&document.querySelector(".pdp,article.card[data-id]"))Promise.all([catsReady,offersReady]).then(([recs])=>{
   if(!recs||!recs.length)return;
   const pd0=document.querySelector(".pdp");
@@ -812,4 +829,19 @@ function collPage(){
   document.title=name+" Collection | Tarasvini";if(h)h.textContent=name+" collection";
   if(cr)cr.innerHTML=`<a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">${esc(name)} collection</span>`;
   box.dataset.coll=name;box.innerHTML=`<p class="catintro">Our ${esc(name)} collection: ${items.length} ${items.length===1?"style":"styles"}. Free shipping across India. Tap any product to see photos and details, then order on WhatsApp.</p><div class="grid">${items.map(cardHTML).join("")}</div>`;
+}
+
+// ---------- New arrivals page (/new-arrivals.html): every product marked New Arrival, live from the sheet ----------
+function newPage(){
+  const box=document.querySelector(".newpage");if(!box)return;
+  const all=state.all.filter(p=>p.isnew).sort((a,b)=>pri(a)-pri(b)||(a.i-b.i));
+  if(!all.length){box.innerHTML='<div class="empty"><p>New arrivals are coming soon. Follow us on Instagram to see them first.</p><a class="btn primary" href="index.html">See all products</a> <a class="btn" href="https://www.instagram.com/tarasvini/" target="_blank" rel="noopener">'+IC.ig+'Instagram</a></div>';return}
+  const cats=present().map(c=>[c,all.filter(p=>p.category===c[0]).length]).filter(x=>x[1]);
+  let cur="";
+  const draw=()=>{const list=cur?all.filter(p=>p.category===cur):all;
+    box.innerHTML=`<p class="catintro">${all.length} new ${all.length===1?"style":"styles"} just arrived. Tap any product to see photos and details, then order on WhatsApp.</p>
+    ${cats.length>1?`<div class="pchips" role="group" aria-label="Category"><button class="pchip" type="button" data-nc="" aria-pressed="${!cur}">All<small>${all.length}</small></button>${cats.map(([c,n])=>`<button class="pchip" type="button" data-nc="${esc(c[0])}" aria-pressed="${cur===c[0]}">${esc(c[1])}<small>${n}</small></button>`).join("")}</div>`:""}
+    <div class="grid">${list.map(cardHTML).join("")}</div>`;
+    box.querySelectorAll("[data-nc]").forEach(b=>b.onclick=()=>{cur=b.dataset.nc;draw()});slSync()};
+  draw();
 }
