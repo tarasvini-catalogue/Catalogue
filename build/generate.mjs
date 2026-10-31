@@ -19,10 +19,27 @@ const SHEET_TABS = JSON.parse(grab(/const SHEET_TABS\s*=\s*(\[[^\]]*\])/, "SHEET
 const WA = grab(/const WA\s*=\s*"(\d+)"/, "WA");
 const BACKUP_CSV = grab(/const BACKUP_CSV\s*=\s*"([^"]+)"/, "BACKUP_CSV");
 const ALIAS = new Function("return " + grab(/const ALIAS\s*=\s*(\{[^;]*\});/, "ALIAS"))();
+const CROP_TOP = Number(grab(/const CROP_TOP\s*=\s*([\d.]+)/, "CROP_TOP"));
 const KNOWN = new Function("return " + grab(/const KNOWN\s*=\s*(\[\[[^;]*\]\]);/, "KNOWN"))();
 const tabURL = g => SHEET_URL + (g ? "?gid=" + g + "&single=true&output=csv" : "?output=csv");
 
+// Start downloading the sheet tabs and connecting to Cloudinary as soon as a page opens,
+// instead of waiting for app.js to run (saves about a second before photos appear).
+// Visitor statistics (Cloudflare Web Analytics, free, no cookies): set CF_BEACON_TOKEN in
+// Netlify > Site configuration > Environment variables. Without it nothing is added.
+const CF = String(process.env.CF_BEACON_TOKEN || "").trim();
+const BEACON = /^[a-f0-9]{32}$/i.test(CF) ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"${CF}"}'></script>` : "";
+if (CF && !BEACON) console.log("CF_BEACON_TOKEN does not look right (32 letters and numbers expected), visitor statistics not added");
+const PRELOAD = ['<link rel="preconnect" href="https://res.cloudinary.com">', '<link rel="preconnect" href="https://docs.google.com" crossorigin>',
+  '<link rel="preload" as="fetch" crossorigin="anonymous" href="/snapshot.json">']
+  .concat(SHEET_TABS.map(g => `<link rel="preload" as="fetch" crossorigin="anonymous" href="${tabURL(g).replace(/&/g, "&amp;")}">`)).concat(BEACON ? [BEACON] : []).join("\n");
+
 // ---------- helpers (same rules as app.js) ----------
+// Cloudinary photos: right size, light format, top strip with the code label trimmed (CROP_TOP in app.js)
+const pic = (u, w) => { const m = String(u || "").match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(.*)$/);
+  if (!m || /^[a-z]{1,4}_[^/]*\//.test(m[2])) return u;
+  return m[1] + (CROP_TOP ? "c_crop,g_south,w_1.0,h_" + (1 - CROP_TOP / 100).toFixed(2) + "/" : "") + "c_limit,w_" + w + ",f_auto,q_auto/" + m[2]; };
+const FAIL = `onerror="if(this.dataset.o){this.src=this.dataset.o;this.removeAttribute('data-o')}else this.remove()"`;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const title = s => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 const inr = n => "₹" + n.toLocaleString("en-IN");
@@ -65,7 +82,8 @@ async function fetchText(url) {
 }
 async function readCatalogue() {
   const isCat = t => { const h = (parseCSV(t)[0] || []).map(hkey); return h.includes("id") && h.includes("name"); };
-  let texts = (await Promise.all(SHEET_TABS.map(g => fetchText(tabURL(g))))).filter(t => t && isCat(t));
+  const raw = await Promise.all(SHEET_TABS.map(g => fetchText(tabURL(g))));
+  let texts = raw.filter(t => t && isCat(t));
   let source = "Google Sheet";
   if (!texts.length) { texts = [readFileSync(BACKUP_CSV, "utf8")]; source = BACKUP_CSV + " (Google Sheet could not be reached)"; }
   const seen = new Set(); let recs = [], hasShow = false;
@@ -86,12 +104,13 @@ async function readCatalogue() {
       ...o, i, cat, category: cat[0], ...colInfo(o.colours),
       price: onsale ? sp : mrp, was: onsale ? mrp : 0, onsale,
       coll: tidy(String(o.collection || "").replace(/\s+/g, " ").trim()),
+      homecoll: tidy(String(o.homecoll || "").replace(/\s+/g, " ").trim()),
       occ: String(o.occ || "").split(/[,;\/]+/).map(x => title(x.trim())).filter(Boolean),
       imgs: getImgs(o), sold: /^sold/i.test(o.available), feat: yes(o.featured), isnew: yes(o.isnew),
       slug: (slug(o.name) || "product") + "-" + (slug(o.id) || i),
     };
   });
-  return { items, cats, source };
+  return { items, cats, source, raw };
 }
 
 // ---------- page pieces ----------
@@ -104,7 +123,7 @@ const priceHTML = p => p.price ? inr(p.price) + (p.was ? `<s class="was">${inr(p
 const colText = p => p.cnames.length > 1 ? p.cnames.join(", ") : p.colours > 1 ? p.colours + " colours" : p.cnames[0] || "";
 const pageURL = p => SITE + "/p/" + p.slug + ".html";
 const waLink = p => "https://wa.me/" + WA + "?text=" + encodeURIComponent([
-  p.imgs[0] || "", "Hi Tarasvini, I'd like to order:", p.name, "Code: " + p.id,
+  pic(p.imgs[0] || "", 600), "Hi Tarasvini, I'd like to order:", p.name, "Code: " + p.id,
   p.price ? "Price: " + inr(p.price) + (p.was ? " (sale price, was " + inr(p.was) + ")" : "") : "",
   p.colours > 1 ? "Colour: " : "", p.sizes ? "Size: " : "", "Link: " + pageURL(p), "Please confirm availability and delivery."].filter(Boolean).join("\n"));
 const WA_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-11.9 7L4 20l1.5-4A8 8 0 1 1 20 11.5z"/><path d="M9.2 8.8c.3 2.4 2.5 4.6 5 5l1-1.2-1.7-.9-.8.6c-.9-.4-1.6-1.1-2-2l.6-.8-.9-1.7z"/></svg>';
@@ -126,11 +145,11 @@ const plainDesc = p => (p.description ? String(p.description).replace(/\s*\n\s*/
 
 function ph(p, cats, eager, idx = 0) {
   const [c, t] = ccol(p.category, cats);
-  const img = p.imgs[idx] ? `<img src="${esc(p.imgs[idx])}" alt="${esc(p.name)}" loading="${eager ? "eager" : "lazy"}" onerror="this.remove()">` : "";
+  const img = p.imgs[idx] ? `<img src="${esc(pic(p.imgs[idx], eager ? 1200 : 600))}" data-o="${esc(p.imgs[idx])}" alt="${esc(p.name)}" loading="${eager ? "eager" : "lazy"}" ${FAIL}>` : "";
   const tag = p.sold ? '<span class="tags"><span class="tag sold">Sold out</span></span>' : (p.isnew || p.onsale) ? `<span class="tags">${p.isnew ? '<span class="tag new">New arrival</span>' : ""}${p.onsale ? '<span class="tag sale">Sale</span>' : ""}</span>` : "";
   return `<div class="ph" style="--c:${c};--t:${t}"><b>${esc(p.id)}</b><span>Photo coming soon</span>${img}${tag}<div class="zari" aria-hidden="true"></div></div>`;
 }
-const card = (p, cats) => `<article class="card${p.sold ? " is-sold" : ""}"><a class="open" href="/p/${p.slug}.html">${ph(p, cats, false)}<div class="info">${p.coll ? `<p class="ty">${esc(p.coll)}</p>` : ""}<h3>${esc(p.name)}</h3><div class="prow"><span class="price">${priceHTML(p)}</span>${colText(p) && !p.cnames.length ? `<span class="cols">${esc(colText(p))}</span>` : ""}</div></div></a>${p.sold ? '<button class="btn order" type="button" disabled>Sold out</button>' : `<a class="btn order" href="${waLink(p)}" target="_blank" rel="noopener">${WA_ICON}Order on WhatsApp</a>`}</article>`;
+const card = (p, cats) => `<article class="card${p.sold ? " is-sold" : ""}" data-id="${esc(p.id)}"><a class="open" href="/p/${p.slug}.html">${ph(p, cats, false)}<div class="info">${p.coll ? `<p class="ty">${esc(p.coll)}</p>` : ""}<h3>${esc(p.name)}</h3><div class="prow"><span class="price">${priceHTML(p)}</span>${colText(p) && !p.cnames.length ? `<span class="cols">${esc(colText(p))}</span>` : ""}</div></div></a>${p.sold ? '<button class="btn order" type="button" disabled>Sold out</button>' : `<a class="btn order" href="${waLink(p)}" target="_blank" rel="noopener">${WA_ICON}Order on WhatsApp</a>`}</article>`;
 const order = (a, b) => (a.sold - b.sold) || (b.isnew - a.isnew) || (b.feat - a.feat) || ((b.imgs.length > 0) - (a.imgs.length > 0)) || (a.i - b.i);
 const ld = o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, "\\u003c")}</script>`;
 
@@ -154,6 +173,7 @@ function page({ path, title: t, desc, image, body, schema = [] }) {
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+${PRELOAD}
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 ${schema.map(ld).join("\n")}
@@ -170,9 +190,9 @@ function productPage(p, all, cats) {
   const trail = [["Home", "/"], [p.cat[1], cpath], [p.name, "/p/" + p.slug + ".html"]];
   const sizes = String(p.sizes || "").split(/[,\s]+/).filter(Boolean);
   const more = all.filter(x => x.category === p.category && x !== p && !x.sold).sort((a, b) => ((b.coll === p.coll) - (a.coll === p.coll)) || order(a, b)).slice(0, 8);
-  const gallery = `<div class="gal pgal">${ph(p, cats, true, 0)}${p.imgs.length > 1 ? `<div class="thumbs">${p.imgs.map((u, i) => `<button type="button" data-src="${esc(u)}" aria-label="Photo ${i + 1}"${i ? "" : ' aria-current="true"'}><img src="${esc(u)}" alt="" loading="lazy"></button>`).join("")}</div>` : ""}</div>`;
+  const gallery = `<div class="gal pgal">${ph(p, cats, true, 0)}${p.imgs.length > 1 ? `<div class="thumbs">${p.imgs.map((u, i) => `<button type="button" data-src="${esc(pic(u, 1200))}" data-o="${esc(u)}" aria-label="Photo ${i + 1}"${i ? "" : ' aria-current="true"'}><img src="${esc(pic(u, 200))}" data-o="${esc(u)}" alt="" loading="lazy" ${FAIL}></button>`).join("")}</div>` : ""}</div>`;
   const body = `${crumbs(trail)}
-<section class="wrap pdp"><div class="dg">${gallery}
+<section class="wrap pdp" data-id="${esc(p.id)}"><div class="dg">${gallery}
 <div class="body">${p.coll ? `<p class="ty">${esc(p.coll)}</p>` : ""}<h1>${esc(p.name)}</h1><div class="price">${priceHTML(p)}</div>
 ${sizes.length ? `<div class="opt"><h4>Sizes</h4><div class="sizes">${sizes.map(s => `<span>${esc(s)}</span>`).join("")}</div></div>` : ""}
 <div class="desc">${p.description ? descHTML(p.description) : `<p>${esc(summary(p))}</p>`}</div>
@@ -181,16 +201,16 @@ ${sizes.length ? `<div class="opt"><h4>Sizes</h4><div class="sizes">${sizes.map(
 <div class="policy"><p><strong>Free shipping across India.</strong> Prepaid orders only, no cash on delivery.</p><p>Returns or exchanges only for damaged or wrong items, reported within 24–48 hours with a full, uncut unboxing video. <a href="shipping-returns.html">Shipping and returns</a></p></div>
 </div></div></section>
 ${more.length ? `<section class="wrap shop related" aria-labelledby="moreh"><div class="shophead"><h2 id="moreh">More ${esc(p.cat[3])}</h2><a class="btn" href="${cpath.slice(1)}">See all ${esc(p.cat[3])}</a></div><div class="grid">${more.map(x => card(x, cats)).join("")}</div></section>` : ""}
-<script>(function(){var g=document.querySelector(".pgal");if(!g)return;g.addEventListener("click",function(e){var b=e.target.closest(".thumbs button");if(!b)return;var i=g.querySelector(".ph img");if(!i){i=document.createElement("img");g.querySelector(".ph").appendChild(i)}i.src=b.dataset.src;g.querySelectorAll(".thumbs button").forEach(function(x){x.setAttribute("aria-current",x===b)})})})();</script>`;
+<script>(function(){var g=document.querySelector(".pgal");if(!g)return;g.addEventListener("click",function(e){var b=e.target.closest(".thumbs button");if(!b)return;var i=g.querySelector(".ph img");if(!i){i=document.createElement("img");g.querySelector(".ph").appendChild(i)}i.dataset.o=b.dataset.o;i.onerror=function(){if(this.dataset.o){this.src=this.dataset.o;this.removeAttribute("data-o")}};i.src=b.dataset.src;g.querySelectorAll(".thumbs button").forEach(function(x){x.setAttribute("aria-current",x===b)})})})();</script>`;
   const offers = p.price ? {
     "@type": "Offer", url: pageURL(p), priceCurrency: "INR", price: p.price.toFixed(2), itemCondition: "https://schema.org/NewCondition",
     availability: p.sold ? "https://schema.org/OutOfStock" : "https://schema.org/InStock", seller: { "@type": "Organization", name: BRAND },
     shippingDetails: { "@type": "OfferShippingDetails", shippingRate: { "@type": "MonetaryAmount", value: "0", currency: "INR" }, shippingDestination: { "@type": "DefinedRegion", addressCountry: "IN" } },
   } : undefined;
-  const schema = [{ "@context": "https://schema.org", "@type": "Product", name: p.name, sku: p.id, brand: { "@type": "Brand", name: BRAND }, description: plainDesc(p), url: pageURL(p), ...(p.imgs.length ? { image: p.imgs } : {}), ...(p.fabric_group ? { material: p.fabric_group } : {}), category: p.cat[0] + (p.coll ? " > " + p.coll : ""), ...(offers ? { offers } : {}) }, crumbLD(trail)];
+  const schema = [{ "@context": "https://schema.org", "@type": "Product", name: p.name, sku: p.id, brand: { "@type": "Brand", name: BRAND }, description: plainDesc(p), url: pageURL(p), ...(p.imgs.length ? { image: p.imgs.map(u => pic(u, 1200)) } : {}), ...(p.fabric_group ? { material: p.fabric_group } : {}), category: p.cat[0] + (p.coll ? " > " + p.coll : ""), ...(offers ? { offers } : {}) }, crumbLD(trail)];
   const t = `${p.name}${p.price ? " | " + inr(p.price) : ""} | ${BRAND}`;
   const d = cut(p.description ? plainDesc(p) : summary(p), 158);
-  return page({ path: "/p/" + p.slug + ".html", title: t, desc: d, image: p.imgs[0], body, schema });
+  return page({ path: "/p/" + p.slug + ".html", title: t, desc: d, image: pic(p.imgs[0], 1200), body, schema });
 }
 
 function categoryPage(c, all, cats) {
@@ -206,7 +226,24 @@ function categoryPage(c, all, cats) {
   const body = `${crumbs(trail)}<section class="pagehead"><div class="wrap"><h1>${esc(c[1])}</h1><div class="zari" aria-hidden="true"></div></div></section>
 <section class="wrap shop catpage"><p class="catintro">${esc(intro)}</p><p><a class="btn" href="index.html?cat=${encodeURIComponent(c[0])}">Filter by fabric, price and occasion</a></p><div class="grid">${items.map(p => card(p, cats)).join("")}</div></section>`;
   const schema = [crumbLD(trail), { "@context": "https://schema.org", "@type": "ItemList", itemListElement: items.slice(0, 50).map((p, i) => ({ "@type": "ListItem", position: i + 1, url: pageURL(p) })) }];
-  return page({ path, title: `${c[1]} Online | ${BRAND}, Chennai | Free Shipping India`, desc: cut(intro, 158), image: items.find(p => p.imgs.length)?.imgs[0], body, schema });
+  return page({ path, title: `${c[1]} Online | ${BRAND}, Chennai | Free Shipping India`, desc: cut(intro, 158), image: pic(items.find(p => p.imgs.length)?.imgs[0], 1200), body, schema });
+}
+
+// One page per Home Collection name (Festival, Wedding, ...), all categories together:
+// /collections/<name>.html. Good for Instagram stories and bios.
+const collSlug = n => slug(n) || "collection";
+function collectionPage(name, all, cats) {
+  const items = all.filter(p => p.homecoll && p.homecoll.toLowerCase() === name.toLowerCase()).sort(order);
+  const path = "/collections/" + collSlug(name) + ".html";
+  const kinds = cats.filter(c => items.some(p => p.category === c[0])).map(c => c[3]);
+  const prices = items.filter(p => p.price && !p.sold).map(p => p.price);
+  const intro = [`Our ${name} collection: ${items.length} ${items.length === 1 ? "style" : "styles"}${kinds.length ? ` across ${and(kinds)}` : ""}${prices.length ? `, from ${inr(Math.min(...prices))}` : ""}.`,
+    "Free shipping across India. Tap any product to see photos and details, then order on WhatsApp."].join(" ");
+  const trail = [["Home", "/"], [name + " collection", path]];
+  const body = `${crumbs(trail)}<section class="pagehead"><div class="wrap"><h1>${esc(name)} collection</h1><div class="zari" aria-hidden="true"></div></div></section>
+<section class="wrap shop catpage collpage" data-coll="${esc(name)}"><p class="catintro">${esc(intro)}</p><div class="grid">${items.map(p => card(p, cats)).join("")}</div></section>`;
+  const schema = [crumbLD(trail), { "@context": "https://schema.org", "@type": "ItemList", itemListElement: items.slice(0, 50).map((p, i) => ({ "@type": "ListItem", position: i + 1, url: pageURL(p) })) }];
+  return page({ path, title: `${name} Collection | ${BRAND}, Chennai`, desc: cut(intro, 158), image: pic(items.find(p => p.imgs.length)?.imgs[0], 1200), body, schema });
 }
 
 // ---------- Google Merchant Center feed ----------
@@ -217,13 +254,14 @@ function feed(items) {
 <g:title>${xml(p.name.slice(0, 150))}</g:title>
 <g:description>${xml(plainDesc(p))}</g:description>
 <g:link>${xml(pageURL(p))}</g:link>
-<g:image_link>${xml(p.imgs[0])}</g:image_link>
-${p.imgs.slice(1, 10).map(u => `<g:additional_image_link>${xml(u)}</g:additional_image_link>`).join("\n")}
+<g:image_link>${xml(pic(p.imgs[0], 1200))}</g:image_link>
+${p.imgs.slice(1, 10).map(u => `<g:additional_image_link>${xml(pic(u, 1200))}</g:additional_image_link>`).join("\n")}
 <g:availability>${p.sold ? "out_of_stock" : "in_stock"}</g:availability>
 <g:price>${(p.was || p.price).toFixed(2)} INR</g:price>
 ${p.was ? `<g:sale_price>${p.price.toFixed(2)} INR</g:sale_price>` : ""}
 <g:condition>new</g:condition>
 <g:brand>${BRAND}</g:brand>
+<g:google_product_category>Apparel &amp; Accessories &gt; Clothing</g:google_product_category>
 <g:identifier_exists>no</g:identifier_exists>
 <g:product_type>${xml([p.cat[1], p.coll].filter(Boolean).join(" > "))}</g:product_type>
 ${p.fabric_group ? `<g:material>${xml(p.fabric_group)}</g:material>` : ""}
@@ -236,7 +274,7 @@ ${p.fabric_group ? `<g:material>${xml(p.fabric_group)}</g:material>` : ""}
 <channel>
 <title>${BRAND}</title>
 <link>${SITE}/</link>
-<description>${BRAND} women's ethnic wear: sarees, salwar suits, kurtis and lehengas</description>
+<description>${BRAND} women's ethnic wear: sarees, salwars, anarkalis, kurtis and lehengas</description>
 ${rows.join("\n")}
 </channel>
 </rss>
@@ -244,15 +282,46 @@ ${rows.join("\n")}
 }
 
 // ---------- write everything ----------
-const { items, cats, source } = await readCatalogue();
+const { items, cats, source, raw } = await readCatalogue();
 if (!items.length) throw new Error("No products found, stopping so the live site is not replaced by an empty one.");
 if (existsSync("p")) rmSync("p", { recursive: true });
 mkdirSync("p");
 items.forEach(p => writeFileSync("p/" + p.slug + ".html", productPage(p, items, cats)));
 const present = cats.filter(c => items.some(p => p.category === c[0]));
 present.forEach(c => writeFileSync(catSlug(c) + ".html", categoryPage(c, items, cats)));
+// Page for products added after the last deploy: /p/<anything>.html shows it from the live sheet
+// (netlify.toml sends missing /p/ addresses here; pages that exist are served as they are).
+writeFileSync("product.html", page({ path: "/product.html", title: "Tarasvini", desc: "Product details at Tarasvini.", image: "",
+  body: `<nav class="crumbs wrap" aria-label="Breadcrumb"></nav><section class="wrap pdp"><p class="count">Loading product…</p></section>` })
+  .replace("<head>", '<head>\n<meta name="robots" content="noindex">').replace(/\n<link rel="canonical"[^>]*>/, ""));
+// collection pages, plus collection.html for a collection named after the last deploy
+const collNames = [...new Map(items.filter(p => p.homecoll && !p.sold).map(p => [p.homecoll.toLowerCase(), p.homecoll])).values()];
+if (existsSync("collections")) rmSync("collections", { recursive: true });
+mkdirSync("collections");
+collNames.forEach(n => writeFileSync("collections/" + collSlug(n) + ".html", collectionPage(n, items, cats)));
+writeFileSync("collection.html", page({ path: "/collection.html", title: "Collection | Tarasvini", desc: "A Tarasvini collection.", image: "",
+  body: `<nav class="crumbs wrap" aria-label="Breadcrumb"></nav><section class="pagehead"><div class="wrap"><h1>Collection</h1><div class="zari" aria-hidden="true"></div></div></section><section class="wrap shop catpage collpage"><p class="count">Loading…</p></section>` })
+  .replace("<head>", '<head>\n<meta name="robots" content="noindex">').replace(/\n<link rel="canonical"[^>]*>/, ""));
+// New arrivals page: every product marked New Arrival, all categories (refreshed live by app.js)
+const fresh = items.filter(p => p.isnew).sort(order);
+writeFileSync("new-arrivals.html", page({ path: "/new-arrivals.html", title: `New Arrivals | ${BRAND}, Chennai | Sarees, Salwars, Kurtis`,
+  desc: `The latest arrivals at ${BRAND}: new sarees, salwars, anarkalis and kurtis. Free shipping across India, order on WhatsApp.`,
+  image: pic(fresh.find(p => p.imgs.length)?.imgs[0], 1200),
+  body: `${crumbs([["Home", "/"], ["New arrivals", "/new-arrivals.html"]])}<section class="pagehead"><div class="wrap"><h1>New arrivals</h1><div class="zari" aria-hidden="true"></div></div></section>
+<section class="wrap shop catpage newpage"><p class="catintro">${fresh.length} new ${fresh.length === 1 ? "style" : "styles"} just arrived.</p><div class="grid">${fresh.map(p => card(p, cats)).join("")}</div></section>`,
+  schema: [crumbLD([["Home", "/"], ["New arrivals", "/new-arrivals.html"]])] }));
+// Saved copy of the sheet for instant loading (snapshot.json). Only the columns the website uses
+// are kept. Made only when the live sheet was read, so it is never older than the backup file.
+const KEEP = new Set(["id", "name", "category", "collection", "fabric_group", "colours", "sizes", "price", "sale", "delivery", "available", "featured", "image_url",
+  "video_url", "description", "show", "isnew", "occ", "homecoll", "headline", "details", "start_date", "end_date", "offer_code", "discount", "min_order",
+  "full_price_only", "button_text", "button_link", "colour", "color"]);
+const csvCell = v => /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+const slim = t => { if (!t) return ""; const rows = parseCSV(t); const keep = (rows[0] || []).map((h, i) => [hkey(h), i]).filter(([k]) => KEEP.has(k) || /^image_url_\d+$/.test(k)).map(x => x[1]);
+  return rows.map(r => keep.map(i => csvCell(String(r[i] ?? ""))).join(",")).join("\n"); };
+if (source === "Google Sheet") writeFileSync("snapshot.json", JSON.stringify({ built: new Date().toISOString(), tabs: Object.fromEntries(SHEET_TABS.map((g, i) => [g, slim(raw[i])])) }));
+else if (existsSync("snapshot.json")) rmSync("snapshot.json");
 const today = new Date().toISOString().slice(0, 10);
-const urls = [["/", today], ...present.map(c => ["/" + catSlug(c) + ".html", today]), ["/reviews.html"], ["/contact.html"], ["/shipping-returns.html"], ["/privacy.html"], ...items.map(p => ["/p/" + p.slug + ".html"])];
+const urls = [["/", today], ...present.map(c => ["/" + catSlug(c) + ".html", today]), ["/reviews.html"], ["/contact.html"], ["/shipping-returns.html"], ["/privacy.html"], ["/new-arrivals.html", today], ...collNames.map(n => ["/collections/" + collSlug(n) + ".html", today]), ...items.map(p => ["/p/" + p.slug + ".html"])];
 writeFileSync("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map(([u, d]) => `  <url><loc>${SITE}${u}</loc>${d ? `<lastmod>${d}</lastmod>` : ""}</url>`).join("\n")}
@@ -260,9 +329,41 @@ ${urls.map(([u, d]) => `  <url><loc>${SITE}${u}</loc>${d ? `<lastmod>${d}</lastm
 `);
 writeFileSync("feed.xml", feed(items));
 // Home page intro: point category links at the new category pages (only for categories that have products)
-const intro = index.match(/<section class="block seointro"[\s\S]*?<\/section>/);
+let home = index.replace(/\n?<!-- preload -->[\s\S]*?<!-- \/preload -->/, "");
+home = home.replace("</head>", "<!-- preload -->\n" + PRELOAD + "\n<!-- /preload -->\n</head>");
+const intro = home.match(/<section class="block seointro"[\s\S]*?<\/section>/);
 if (intro) {
   const fixed = intro[0].replace(/href="index\.html\?cat=([^"]+)"/g, (m, v) => { const c = present.find(x => x[0] === catInfo(decodeURIComponent(v))[0]); return c ? `href="${catSlug(c)}.html"` : m; });
-  writeFileSync("index.html", index.replace(intro[0], fixed));
+  home = home.replace(intro[0], fixed);
 }
+writeFileSync("index.html", home);
+// the other pages also read the sheet (menu, prices), so they get the same early downloads
+["reviews.html", "contact.html", "shipping-returns.html", "privacy.html", "about.html"].filter(existsSync).forEach(f => {
+  const h = readFileSync(f, "utf8").replace(/\n?<!-- preload -->[\s\S]*?<!-- \/preload -->/, "");
+  writeFileSync(f, h.replace("</head>", "<!-- preload -->\n" + PRELOAD + "\n<!-- /preload -->\n</head>"));
+});
+// ---------- prepare photos in Cloudinary ----------
+// Cloudinary makes each trimmed/resized photo the first time it is asked for (1-2 seconds).
+// Asking for every size here, during the deploy, means customers never wait for that.
+// Sizes: 600 (product cards), 1200 (big photo), 200 (thumbnails). Never stops the deploy.
+async function warmPhotos(items) {
+  const urls = new Set();
+  items.forEach(p => p.imgs.forEach((u, i) => { if (pic(u, 600) === u) return; [200, 1200].concat(i ? [] : [600]).forEach(w => urls.add(pic(u, w))); }));
+  const list = [...urls]; let ok = 0, bad = 0, n = 0; const failed = [];
+  const accept = "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"; // same as Chrome, so the AVIF/WebP copy is made
+  const t0 = Date.now(), LIMIT = 240000; // stop after 4 minutes; the rest are made on first view
+  async function worker() {
+    while (n < list.length && Date.now() - t0 < LIMIT) {
+      const u = list[n++]; const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 30000);
+      try { const r = await fetch(u, { headers: { accept }, signal: ctl.signal }); await r.arrayBuffer(); if (r.ok) ok++; else { bad++; if (failed.length < 3) failed.push(r.status + " " + u); } }
+      catch (e) { bad++; if (failed.length < 3) failed.push((e.name === "AbortError" ? "timeout " : "no connection ") + u); } finally { clearTimeout(t); }
+    }
+  }
+  await Promise.all(Array.from({ length: 8 }, worker));
+  console.log(`Photos prepared in Cloudinary: ${ok} ready, ${bad} failed, ${list.length - ok - bad} left for later (${Math.round((Date.now() - t0) / 1000)}s)`);
+  if (failed.length) console.log("Photo problems (the site shows the original photo instead):\n  " + failed.join("\n  "));
+}
+if (process.env.NETLIFY || process.env.WARM_PHOTOS) await warmPhotos(items).catch(e => console.log("Photo preparation skipped:", e.message));
+
+console.log(`Collections: ${collNames.length ? collNames.map(n => "/collections/" + collSlug(n) + ".html").join(", ") : "none (fill the Home Collection column)"}; instant-load copy: ${source === "Google Sheet" ? "snapshot.json" : "not made"}; visitor statistics: ${BEACON ? "on" : "off"}`);
 console.log(`Tarasvini build: ${items.length} products from ${source}; ${present.length} category pages (${present.map(c => catSlug(c) + ".html").join(", ")}); ${items.filter(p => p.imgs.length && p.price).length} products in feed.xml`);

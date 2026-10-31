@@ -154,3 +154,91 @@ live from the sheet; product pages and the feed update on the next deploy: any u
 GitHub, **Deploys > Trigger deploy** in Netlify, or the automatic weekly rebuild
 (`netlify/functions/weekly-rebuild.mjs`, needs the `BUILD_HOOK_URL` environment variable).
 If the sheet cannot be read, the build uses `catalogue-backup.csv`.
+
+Prices stay correct without a redeploy: when a product page or category page opens, `app.js`
+reads the Google Sheet and updates the price, sale price, Sold out, the offer line and the
+WhatsApp order message on the page. Only `feed.xml` (Google Shopping) and the page title Google
+saved still wait for the next deploy. If the sheet cannot be reached, the page shows what was built.
+
+
+## Photos (faster loading, code label hidden)
+
+`CROP_TOP` near the top of the photo section in `app.js` (default 5) trims that % of the height
+from the top of every Cloudinary photo, which hides the product code label. Photos are also
+sent at the size each screen needs (`c_limit,w_...,f_auto,q_auto`). Your photos in Cloudinary
+are not changed. Set `CROP_TOP=0` to show full photos. If a trimmed photo cannot load, the
+original is shown. The product page builder reads the same setting. Cloudinary makes each trimmed/resized copy the first time it
+is asked for, so on every deploy the builder asks for all of them (sizes 200, 600, 1200). The
+Netlify deploy log shows a line "Photos prepared in Cloudinary: ... ready, ... failed".
+
+## Shortlist and floating buttons
+
+Every product has a heart. Saved products appear in a pink "Shortlist" button at the bottom
+right; it opens a list with the total and "Send shortlist on WhatsApp" (one message with all
+codes, prices and links) or "Send on Instagram" (copies the list). The shortlist is kept only
+in the customer's own browser. A green WhatsApp chat button is on every page.
+
+## Orders (private)
+
+Orders are not part of this website. They are kept in a separate private Google Sheet with
+its own admin page (Google Apps Script). See the Orders admin folder and its SETUP.txt.
+
+
+## Page speed
+
+The build adds "preload" lines to the top of every page so the browser starts downloading the
+Google Sheet tabs and connecting to Cloudinary immediately, instead of after app.js has loaded.
+They are made from SHEET_URL and SHEET_TABS in app.js, so nothing to update by hand.
+
+
+## Product pages
+
+Every product opens on its own page, /p/<product-name>-<code>.html, instead of a pop-up.
+The page is built on each deploy (so Google can list it) and, when it opens, fills in the live
+details from the sheet: photos, price, sizes, colours, description, offer, order buttons, shortlist.
+A product added to the sheet after the last deploy has no page file yet: netlify.toml sends its
+address to product.html, which shows it from the sheet. Old links (index.html?item=CODE) go to the
+product page. The Back button returns to the same category, filters and scroll position.
+WhatsApp and Instagram messages and the Share button now use the product page link, so WhatsApp
+shows the product photo and price as a preview.
+
+
+## Instant catalogue (snapshot.json)
+
+On each deploy the builder saves a copy of the sheet (only the columns the website uses) as
+snapshot.json. The home page shows products from it at once, then reads the live Google Sheet and
+updates prices, sold out, new products and offers if anything changed. If the sheet cannot be read
+during a deploy, no copy is made and the site simply waits for the live sheet as before.
+
+## Photo zoom, recently viewed, quick price buttons
+
+- Product page: tap the photo (or the magnifier button) for a full-screen view; tap again to zoom in
+  and move to look around; arrows or swipe for the other photos.
+- "Recently viewed" (home page and product pages): the last products this customer opened, kept in
+  their own browser.
+- Quick price buttons above the products (Under ₹1,000 ... ₹3,000 & above); only bands with products
+  in the category are shown. Edit QUICK in app.js to change them.
+
+## Collection pages
+
+Every name in the Home Collection column gets its own page with all its products from every category:
+/collections/festival.html, /collections/wedding.html, ... (the Netlify deploy log lists them).
+They are also listed under "Collections" in the footer. A collection named after the last deploy is
+shown by collection.html until the next deploy.
+
+## Google listing and visitor statistics
+
+- sitemap.xml and feed.xml (Google Shopping) are made on every deploy. Register them in Google Search
+  Console and Google Merchant Center: https://www.tarasvini.com/sitemap.xml and /feed.xml.
+- Visitor statistics: Cloudflare Web Analytics (free, no cookies). Put its token in Netlify >
+  Site configuration > Environment variables as CF_BEACON_TOKEN and deploy again.
+
+
+## Search and New arrivals
+
+- The search box looks through every category at once (name, code, type, fabric, category,
+  collection, occasion, colours and description; every word must match). Results show how many
+  are in each category. Choosing a category from the menu ends the search.
+- /new-arrivals.html lists every product with New Arrival = Yes, from all categories, with buttons
+  to narrow it by category. "New arrivals" appears first in the menu (and in the footer) whenever
+  at least one product is marked New Arrival. The list is read live from the sheet.

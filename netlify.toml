@@ -10,3 +10,28 @@
 
 [functions]
   directory = "netlify/functions"
+
+# The Salwar Suits category was renamed to Salwars & Anarkalis: old links keep working
+[[redirects]]
+  from = "/salwar-suits.html"
+  to = "/salwars-and-anarkalis.html"
+  status = 301
+
+# Product pages: a product added after the last deploy has no page file yet, so its address
+# shows product.html, which loads the product from the Google Sheet.
+[[redirects]]
+  from = "/p/*"
+  to = "/product.html"
+  status = 200
+
+# Collection pages: a collection named after the last deploy shows collection.html (loaded from the sheet)
+[[redirects]]
+  from = "/collections/*"
+  to = "/collection.html"
+  status = 200
+
+# The instant-load copy of the catalogue: always check for a newer one
+[[headers]]
+  for = "/snapshot.json"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

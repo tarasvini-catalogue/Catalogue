@@ -5,7 +5,7 @@
 const SHEET_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS9qQBcSytVNNAHcNGVlK4E-JdTrTEHP4oKuYvKhzIn24d9zHl_zm6iq6k9UlgLdw/pub";
 // gids of the product tabs (one Catalogue tab, or one tab per category) and the Offers tab, in any order:
 // the site tells them apart by their column headings
-const SHEET_TABS=["664938297","311735615","2084325073","713636433","514300202","1692605283"]; // Sarees, Salwar Suits, Kurtis & Gowns, Lehengas, Cord-sets, Offers
+const SHEET_TABS=["664938297","311735615","2084325073","713636433","514300202","1692605283"]; // Sarees, Salwars & Anarkalis, Kurtis & Gowns, Lehengas, Cord-sets, Offers
 const tabURL=g=>SHEET_URL+(g?"?gid="+g+"&single=true&output=csv":"?output=csv");
 const REVIEWS_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vRb2S-qjo-0bX-2i7J1DDT6V1v6I27PaHz97hULeNk8Gxv0POvyKnnCLhDEPCml8Q/pub?output=csv"; // published CSV of the Reviews sheet
 const WA="918925552441"; // WhatsApp number with country code, no +
@@ -16,16 +16,19 @@ const state={all:[],cat:"Saree",tc:{},fc:{}};
 // Website tabs: [value in the sheet's Category column, tab label, one item, many items]
 // The menu is built from the Category column, in the order categories first appear in the sheet.
 // Known categories get these labels; any new category gets its own name in plural (Dupatta -> Dupattas).
-const KNOWN=[["Saree","Sarees","saree","sarees"],["Salwar","Salwar Suits","salwar suit","salwar suits"],["Kurti","Kurtis & Gowns","style","styles"],["Lehenga","Lehengas","lehenga","lehengas"],["Cord-set","Cord-sets","cord-set","cord-sets"]];
+const KNOWN=[["Saree","Sarees","saree","sarees"],["Salwar","Salwars & Anarkalis","style","styles","Salwar Suits","Salwar Suit","Salwars","Anarkali","Anarkalis","Salwars & Anarkalis"],["Kurti","Kurtis & Gowns","style","styles"],["Lehenga","Lehengas","lehenga","lehengas"],["Cord-set","Cord-sets","cord-set","cord-sets"]];
 let CATS=KNOWN.slice(0,4);
 const catInfo=v=>{v=String(v||"").replace(/\s+/g," ").trim();const k=v.toLowerCase(),kn=KNOWN.find(c=>c.some(x=>x.toLowerCase()===k)||c[0].toLowerCase()+"s"===k||(c[0]==="Cord-set"&&/^co-?ord|^cord ?sets?$/.test(k)));if(kn)return kn;
   const t=v===k?title(v):v,pl=/s$/i.test(t)?t:t+"s";return[t,pl,t.toLowerCase(),pl.toLowerCase()]};
-function setCats(recs){const out=[];recs.forEach(o=>{const c=catInfo(o.category);if(c[0]&&!out.some(x=>x[0].toLowerCase()===c[0].toLowerCase()))out.push(c)});if(out.length)CATS=out;buildNav()}
+let HASNEW=false;
+function setCats(recs){HASNEW=recs.some(o=>yes(o.isnew));const out=[];recs.forEach(o=>{const c=catInfo(o.category);if(c[0]&&!out.some(x=>x[0].toLowerCase()===c[0].toLowerCase()))out.push(c)});if(out.length)CATS=out;buildNav()}
 function buildNav(){
   const nav=document.querySelector(".nav");if(nav){nav.querySelectorAll("a[data-cat]").forEach(a=>a.remove());const sep=nav.querySelector(".sep");
-    CATS.forEach(c=>{const a=document.createElement("a");a.href="index.html?cat="+encodeURIComponent(c[0]);a.dataset.cat=c[0];a.textContent=c[1];if(c[0]===state.cat&&$("#grid"))a.setAttribute("aria-current","true");nav.insertBefore(a,sep)})}
+    CATS.forEach(c=>{const a=document.createElement("a");a.href="index.html?cat="+encodeURIComponent(c[0]);a.dataset.cat=c[0];a.textContent=c[1];if(c[0]===state.cat&&$("#grid"))a.setAttribute("aria-current","true");nav.insertBefore(a,sep)});
+    let nl=nav.querySelector(".navnew");if(HASNEW&&!nl){nl=document.createElement("a");nl.className="navnew";nl.href="/new-arrivals.html";nl.textContent="New arrivals";if(document.querySelector(".newpage"))nl.setAttribute("aria-current","true");nav.insertBefore(nl,nav.firstChild)}
+    if(nl&&!HASNEW)nl.remove()}
   const h=[...document.querySelectorAll("footer h3")].find(x=>x.textContent.trim()==="Shop");
-  if(h){const d=h.parentNode;d.querySelectorAll("a").forEach(a=>a.remove());CATS.forEach(c=>{const a=document.createElement("a");a.href="index.html?cat="+encodeURIComponent(c[0]);a.textContent=c[1];d.appendChild(a)})}
+  if(h){const d=h.parentNode;d.querySelectorAll("a").forEach(a=>a.remove());if(HASNEW){const a=document.createElement("a");a.href="/new-arrivals.html";a.textContent="New arrivals";d.appendChild(a)}CATS.forEach(c=>{const a=document.createElement("a");a.href="index.html?cat="+encodeURIComponent(c[0]);a.textContent=c[1];d.appendChild(a)})}
 }
 // Sheet headings the site understands (any capitals, spaces or dashes): heading -> internal name
 const ALIAS={home_collection:"homecoll",homepage_collection:"homecoll",highlight:"homecoll",occasion:"occ",occasions:"occ",occasion_wear:"occ",wear:"occ",sale_price:"sale",offer_price:"sale",discount_price:"sale",show_on_website:"show",show_on_site:"show",show:"show",on_website:"show",website:"show",new_arrival:"isnew",new_arrivals:"isnew",new:"isnew",product_code:"id",code:"id",model_no:"id",product_name:"name",sub_category:"collection",subcategory:"collection",type:"collection",fabric:"fabric_group",colours:"colours",colors:"colours",number_of_colours:"colours",selling_price:"price",availability:"available",photo_1:"image_url",photo_2:"image_url_2",photo_3:"image_url_3",video:"video_url"};
@@ -91,8 +94,11 @@ const findTab=test=>tabs().then(ts=>ts.find(t=>t&&test((parseCSV(t)[0]||[]).map(
 const title=s=>s.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
 const inr=n=>"₹"+n.toLocaleString("en-IN");
 // Product message for WhatsApp and Instagram. The photo link goes first so WhatsApp shows a picture preview.
-const itemURL=p=>location.origin+location.pathname.replace(/[^/]*$/,"")+"?item="+encodeURIComponent(p.id);
-const prodMsg=(p,intro,end)=>[/^https?:/.test(p.imgs[0]||"")?p.imgs[0]:"",intro,p.name,"Code: "+p.id,
+// Every product has its own page: /p/<name>-<code>.html (same rule as build/generate.mjs)
+const slugify=s=>String(s||"").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/&/g," and ").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+const prodPath=p=>"/p/"+(slugify(p.name)||"product")+"-"+(slugify(p.id)||p.i)+".html";
+const itemURL=p=>location.origin+prodPath(p);
+const prodMsg=(p,intro,end)=>[/^https?:/.test(p.imgs[0]||"")?pic(p.imgs[0],600):"",intro,p.name,"Code: "+p.id,
   p.price?"Price: "+inr(p.price)+(p.was?" (sale price, was "+inr(p.was)+")":""):"",p.colours>1?"Colour: ":"",p.sizes?"Size: ":"",(o=>o?"Offer: "+o.offer_code+(pctText(o.discount)?" ("+pctText(o.discount)+" off)":""):"")(offerFor(p)),"Link: "+itemURL(p),end||""].filter(Boolean).join("\n");
 const waLink=p=>"https://wa.me/"+WA+"?text="+encodeURIComponent(
   p?prodMsg(p,"Hi Tarasvini, I'd like to order:","Please confirm availability and delivery.")
@@ -104,7 +110,7 @@ const PAL=[["#B43C18","#F7E3DB"],["#B0185A","#F7DCE8"],["#0F6B6B","#D8ECEB"],["#
 const ccol=k=>CCOL[k]||PAL[Math.max(0,CATS.findIndex(c=>c[0]===k))%PAL.length];
 function ph(p,big,imgIdx=0){
   const [c,t]=ccol(p.category), imgs=p.imgs;
-  const img=imgs[imgIdx]?`<img src="${esc(imgs[imgIdx])}" alt="${esc(p.name)}" loading="${big?"eager":"lazy"}" onerror="this.remove()">`:"";
+  const img=imgs[imgIdx]?imgTag(imgs[imgIdx],big?1200:600,p.name,!big):"";
   return `<div class="ph" style="--c:${c};--t:${t}"><b>${esc(p.id)}</b><span>Photo coming soon</span>${img}${tags(p)}${!big&&imgs.length>1?`<span class="cnt">${imgs.length} photos</span>`:""}<div class="zari" aria-hidden="true"></div></div>`;
 }
 const num=v=>Number(String(v||"").replace(/[^\d.]/g,""))||0;
@@ -112,48 +118,74 @@ const priceHTML=p=>p.price?inr(p.price)+(p.was?`<s class="was">${inr(p.was)}</s>
 const yes=v=>/^(y|yes|true|1|✓|✔|x)$/i.test(String(v||"").trim());
 const tags=p=>{const t=p.sold?['<span class="tag sold">Sold out</span>']:[p.isnew?'<span class="tag new">New arrival</span>':"",p.onsale?'<span class="tag sale">Sale</span>':"",p.feat?'<span class="tag feat">Featured</span>':""].filter(Boolean);return t.length?`<span class="tags">${t.join("")}</span>`:""};
 
+// Photos from Cloudinary are sent at the size each screen needs, in the lightest format the phone
+// supports, with the top strip (product code label) trimmed off. CROP_TOP = 0 shows the full photo.
+// The photos in Cloudinary are not changed. Photos from anywhere else are shown as they are.
+const CROP_TOP=5; // % of the photo height trimmed from the top
+const pic=(u,w)=>{const m=String(u||"").match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(.*)$/);
+  if(!m||/^[a-z]{1,4}_[^/]*\//.test(m[2]))return u; // not Cloudinary, or already has its own settings
+  return m[1]+(CROP_TOP?"c_crop,g_south,w_1.0,h_"+(1-CROP_TOP/100).toFixed(2)+"/":"")+"c_limit,w_"+w+",f_auto,q_auto/"+m[2]};
+// if a trimmed photo cannot load, show the original; if that fails too, the placeholder stays
+function pfail(i){const o=i.dataset.o;if(o&&i.src!==o){i.removeAttribute("data-o");i.src=o}else i.remove()}
+const imgTag=(u,w,alt,lazy)=>`<img src="${esc(pic(u,w))}" data-o="${esc(u)}" alt="${esc(alt)}"${lazy?' loading="lazy"':""} onerror="pfail(this)">`;
 // Google Drive share links -> direct image links (the file must be shared "Anyone with the link")
 const imgURL=u=>{const m=u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]{20,})/)||u.match(/docs\.google\.com\/uc\?(?:export=\w+&)?id=([\w-]{20,})/);return m?"https://lh3.googleusercontent.com/d/"+m[1]+"=w1200":u};
 const getImgs=o=>{const seen=[];Object.keys(o).filter(k=>/^image_url(_\d+)?$/.test(k)).sort((a,b)=>(parseInt(a.split("_")[2])||1)-(parseInt(b.split("_")[2])||1)).forEach(k=>String(o[k]||"").split(/[\s,|]+/).forEach(u=>{u=imgURL(u.trim());if(u&&!seen.includes(u))seen.push(u)}));return seen.slice(0,8)};
 // Products can be in one Catalogue tab or in one tab per category (Sarees, Salwar Suits, ...).
 // Every published tab with Product Code + Product Name headings is read and merged; a code that
 // appears twice is taken from the first tab only.
+const isCat=t=>{const h=(parseCSV(t)[0]||[]).map(hkey);return h.includes("id")&&h.includes("name")};
 function readCatalogue(){
-  const isCat=t=>{const h=(parseCSV(t)[0]||[]).map(hkey);return h.includes("id")&&h.includes("name")};
   return tabs().then(ts=>{const c=ts.filter(t=>t&&isCat(t));if(!c.length)throw 0;return c})
-  .catch(()=>{const n=$("#note");if(n)n.hidden=false;return fetch(BACKUP_CSV).then(r=>{if(!r.ok)throw 0;return r.text()}).then(t=>[t])})
-  .then(texts=>{
+  .catch(()=>{state.backup=true;const n=$("#note");if(n)n.hidden=false;return fetch(BACKUP_CSV).then(r=>{if(!r.ok)throw 0;return r.text()}).then(t=>[t])})
+  .then(parseCat);
+}
+// Saved copy of the sheet made at each deploy (snapshot.json): the catalogue appears from it at once,
+// then the live Google Sheet replaces it a moment later if anything changed.
+let _snap;
+const snapTabs=()=>_snap||(_snap=fetch("/snapshot.json").then(r=>r.ok?r.json():null).then(j=>j&&j.tabs?SHEET_TABS.map(g=>j.tabs[g]||""):null).catch(()=>null));
+function readSnapshot(){return snapTabs().then(ts=>{if(!ts)return null;const c=ts.filter(t=>t&&isCat(t));if(!c.length)return null;
+  const ot=ts.find(t=>t&&(parseCSV(t)[0]||[]).map(hkey).includes("headline"));if(ot&&!OFFERS.length)OFFERS=parseOffers(ot);return parseCat(c)})}
+function parseCat(texts){
+  {
     const seen=new Set();let recs=[],hasShow=false;
     texts.forEach(t=>{const rows=parseCSV(t),head=rows[0].map(hkey);if(head.includes("show"))hasShow=true;
       rows.slice(1).forEach(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());
         if(o.id&&o.name&&!/^hid/i.test(o.available)&&!seen.has(o.id)){seen.add(o.id);recs.push(o)}})});
     // "Show on Website": only ticked rows appear. If the column is missing or nothing is ticked yet, everything shows.
     if(hasShow&&recs.some(o=>yes(o.show)))recs=recs.filter(o=>yes(o.show));
-    setCats(recs);return recs});
+    setCats(recs);return recs}
 }
 // Live offers: Show = Yes and today between Start Date and End Date (end date counts until midnight)
 let OFFERS=[];
-const offersReady=findTab(h=>h.includes("headline")).then(t=>{if(!t)return [];
-  const rows=parseCSV(t),head=(rows[0]||[]).map(hkey),now=new Date();
-  return OFFERS=rows.slice(1).map(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());return o})
-    .filter(o=>o.headline&&yes(o.show)).filter(o=>{const a=pdate(o.start_date),b=pdate(o.end_date,true);return(!a||a<=now)&&(!b||now<=b)});
-}).catch(()=>[]);
+function parseOffers(t){const rows=parseCSV(t),head=(rows[0]||[]).map(hkey),now=new Date();
+  return rows.slice(1).map(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());return o})
+    .filter(o=>o.headline&&yes(o.show)).filter(o=>{const a=pdate(o.start_date),b=pdate(o.end_date,true);return(!a||a<=now)&&(!b||now<=b)})}
+const offersReady=findTab(h=>h.includes("headline")).then(t=>{if(!t)return [];return OFFERS=parseOffers(t)}).catch(()=>[]);
 // Offer with a code (Offers tab: Offer Code, Discount, Min Order, Full Price Only) that applies to this product
 const pctText=v=>{v=String(v||"").trim();if(!v)return "";if(/^\d*\.\d+$/.test(v)&&+v<1)return Math.round(+v*100)+"%";if(/^\d+(\.\d+)?$/.test(v))return v+"%";return v};
 function offerFor(p){return OFFERS.find(o=>o.offer_code&&!(yes(o.full_price_only)&&p.onsale))}
 function offerLine(o){const d=pctText(o.discount),m=num(o.min_order),e=pdate(o.end_date,true);
   return [d?d+" off":"Special offer",m?"orders above "+inr(m):"",e?"till "+e.toLocaleDateString("en-IN",{day:"numeric",month:"short"}):""].filter(Boolean).join(" ")}
 const catsReady=$("#grid")?null:readCatalogue().catch(()=>{});
+// One product row from the sheet -> the product object used everywhere on the site
+const norm=(o,i)=>({...o,i,category:catKey(o.category),...colInfo(o.colours),
+  ...(()=>{const mrp=num(o.price),sp=num(o.sale);return sp>0&&sp<mrp?{price:sp,was:mrp,onsale:true}:{price:mrp,was:0,onsale:false}})(),
+  coll:(c=>c===c.toLowerCase()?title(c):c)(String(o.collection||"").replace(/\s+/g," ").trim()),
+  homecoll:(c=>c===c.toLowerCase()?title(c):c)(String(o.homecoll||"").replace(/\s+/g," ").trim()),
+  occ:String(o.occ||"").split(/[,;\/]+/).map(x=>title(x.trim())).filter(Boolean),imgs:getImgs(o),sold:/^sold/i.test(o.available),feat:yes(o.featured),isnew:yes(o.isnew)});
 function load(){
+  let first=null,snapRecs=null;
+  readSnapshot().then(r=>{if(!r||first)return;first="snap";snapRecs=r;state.all=r.map(norm);init()}).catch(()=>{});
   Promise.all([readCatalogue(),offersReady]).then(([recs])=>{
-    state.all=recs.map((o,i)=>({...o,i,category:catKey(o.category),...colInfo(o.colours),
-        ...(()=>{const mrp=num(o.price),sp=num(o.sale);return sp>0&&sp<mrp?{price:sp,was:mrp,onsale:true}:{price:mrp,was:0,onsale:false}})(),
-        coll:(c=>c===c.toLowerCase()?title(c):c)(String(o.collection||"").replace(/\s+/g," ").trim()),
-        homecoll:(c=>c===c.toLowerCase()?title(c):c)(String(o.homecoll||"").replace(/\s+/g," ").trim()),
-        occ:String(o.occ||"").split(/[,;\/]+/).map(x=>title(x.trim())).filter(Boolean),imgs:getImgs(o),sold:/^sold/i.test(o.available),feat:yes(o.featured),isnew:yes(o.isnew)}));
-    init();
+    if(!first){first="live";state.all=recs.map(norm);init();return}
+    // already showing the saved copy: switch to the live sheet only if something changed
+    if(state.backup||JSON.stringify(recs)===JSON.stringify(snapRecs))return;
+    const keep=state.shown;state.all=recs.map(norm);
+    if(!inCat().length&&present().length)setCat(present()[0][0],false);else{buildFilters();state.shown=keep;render(true)}
+    rvShow();collFooter();
   }).catch(()=>{
-    $("#count").innerHTML='The catalogue did not load. <button class="linkbtn" onclick="location.reload()">Try again</button>';
+    if(!first)$("#count").innerHTML='The catalogue did not load. <button class="linkbtn" onclick="location.reload()">Try again</button>';
   });
 }
 
@@ -162,13 +194,14 @@ function init(){
   const qs=new URLSearchParams(location.search);
   const m=qs.get("cat")&&CATS.find(c=>c[0]===catKey(qs.get("cat"))); if(m)state.cat=m[0];
   if(qs.get("q")){$("#q").value=qs.get("q");if(!m){const best=present().map(c=>[c[0],state.all.filter(p=>p.category===c[0]&&hit(p,qs.get("q").toLowerCase())).length]).sort((a,b)=>b[1]-a[1])[0];if(best&&best[1])state.cat=best[0]}}
-  const it=qs.get("item"),ip=it&&state.all.find(x=>x.id===it); if(ip)state.cat=ip.category;
+  const it=qs.get("item"),ip=it&&state.all.find(x=>x.id===it); if(ip){location.replace(prodPath(ip));return}
   if(!state.all.some(p=>p.category===state.cat)&&present().length)state.cat=present()[0][0];
   buildHero();
     setCat(state.cat,false);
   const qo=qs.get("occasion");if(qo){const m2=Object.keys(state.oc||{}).find(o=>o.toLowerCase()===qo.toLowerCase());if(m2){sel.occ.add(m2);syncPanel();render()}}
   if(qs.get("q"))document.getElementById("shop").scrollIntoView();
-  if(ip)openDlg(ip.id);
+  restoreCat();
+  rvShow();collFooter();
 }
 // Featured carousel: products marked Featured = yes; topped up with a mix from each category
 function buildFeatured(){
@@ -222,7 +255,7 @@ function buildHero(){
       <div class="htext"><p class="hcat">${esc(cl[1])}</p><h1>${esc(c.name)}</h1>
         <p>${c.items.length} ${c.items.length===1?cl[2]:cl[3]}${pr.length?" from "+inr(Math.min(...pr)):""}</p>
         <button class="btn primary" type="button" data-hcat="${esc(k)}" data-hcoll="${c.home?"":esc(c.name)}" data-hhome="${c.home?esc(c.name):""}">Shop this collection</button></div>
-      <div class="collage n${its.length}">${its.map(p=>`<button class="open" type="button" data-id="${esc(p.id)}" aria-label="${esc(p.name)}">${ph(p,false)}</button>`).join("")}</div></div>`}).join("")+
+      <div class="collage n${its.length}">${its.map(p=>`<a class="open" href="${prodPath(p)}" data-id="${esc(p.id)}" aria-label="${esc(p.name)}">${ph(p,false)}</a>`).join("")}</div></div>`}).join("")+
     (list.length>1?`<div class="hctl"><button class="hnav hprev" type="button" aria-label="Previous collection">&#8249;</button><div class="hdots">${list.map((c,i)=>`<button type="button" data-h="${i}" aria-label="${esc(c.name)}"${i?"":' aria-current="true"'}></button>`).join("")}</div><button class="hnav hnext" type="button" aria-label="Next collection">&#8250;</button></div>`:"");
   const sl=box.querySelectorAll(".hslide");let cur=0,hold=false;
   const show=i=>{cur=(i+sl.length)%sl.length;sl.forEach((s,k)=>s.hidden=k!==cur);box.querySelectorAll(".hdots button").forEach((b,k)=>b.setAttribute("aria-current",k===cur))};
@@ -234,13 +267,15 @@ function buildHero(){
   box.addEventListener("click",e=>{const b=e.target.closest("[data-hcat]");if(!b)return;setCat(b.dataset.hcat,true);if(b.dataset.hcoll)sel.type.add(b.dataset.hcoll);if(b.dataset.hhome)sel.home=b.dataset.hhome;if(b.dataset.hcoll||b.dataset.hhome){syncPanel();render()}});
 }
 function setCat(k,scroll){
-  state.cat=k;resetSel();
+  state.cat=k;resetSel();if(scroll&&$("#q").value){$("#q").value="";try{const u=new URL(location.href);u.searchParams.delete("q");history.replaceState(null,"",u)}catch(e){}}
   document.querySelectorAll(".nav a[data-cat]").forEach(a=>a.setAttribute("aria-current",a.dataset.cat===k?"true":"false"));
   try{const u=new URL(location.href);u.searchParams.set("cat",k);u.searchParams.delete("item");history.replaceState(null,"",u)}catch(e){}
   buildFilters();
   if(scroll)document.getElementById("shop").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
 }
 // Filter panel: tick-boxes for type and fabric, one price band, in-stock
+// Quick price buttons above the products
+const QUICK=[["0-999","Under ₹1,000"],["1000-1999","₹1,000 – ₹1,999"],["2000-2999","₹2,000 – ₹2,999"],["3000-","₹3,000 & above"]];
 const PRICES=[["","Any price"],["0-999","Under ₹1,000"],["1000-1499","₹1,000 to ₹1,499"],["1500-1999","₹1,500 to ₹1,999"],["2000-2999","₹2,000 to ₹2,999"],["3000-","₹3,000 and above"]];
 const OCC_ORDER=["Daily Wear","Work Wear","Party Wear","Celebrity Inspired","Traditional Wear","Wedding Wear"];
 const OCC_LOOK={"Daily Wear":["#E39B12",'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'],
@@ -250,7 +285,7 @@ const OCC_LOOK={"Daily Wear":["#E39B12",'<circle cx="12" cy="12" r="4"/><path d=
 "Traditional Wear":["#B43C18",'<path d="M12 3c2 3 3 5 3 7a3 3 0 0 1-6 0c0-2 1-4 3-7z"/><path d="M4 15c2 3 5 4 8 4s6-1 8-4"/><path d="M6 19h12"/>'],
 "Wedding Wear":["#C2185B",'<circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/><path d="M10 5l2-2 2 2-2 2z"/>']};
 const ALL_ICON='<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>';
-const occTile=(v,label,n,c,ic,img)=>`<button class="occ" type="button" data-occ="${esc(v)}" aria-pressed="${v?"false":"true"}" style="--c:${c}"><span class="ocirc"><svg viewBox="0 0 24 24" aria-hidden="true">${ic}</svg>${img?`<img src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">`:""}</span><b>${esc(label)}</b><small>${n}</small></button>`;
+const occTile=(v,label,n,c,ic,img)=>`<button class="occ" type="button" data-occ="${esc(v)}" aria-pressed="${v?"false":"true"}" style="--c:${c}"><span class="ocirc"><svg viewBox="0 0 24 24" aria-hidden="true">${ic}</svg>${img?imgTag(img,200,"",true):""}</span><b>${esc(label)}</b><small>${n}</small></button>`;
 // Photo for an occasion circle: a product from this category and occasion that has a photo,
 // Featured and New Arrival first, avoiding a photo already used by another circle.
 function occPhoto(items,used){
@@ -286,22 +321,34 @@ function buildFilters(){
   $("#o-price").innerHTML=PRICES.map(([v,l])=>`<label class="fopt"><input type="radio" name="price" value="${v}"${sel.price===v?" checked":""}><span>${l}</span></label>`).join("");
   render();
 }
-const hit=(p,q)=>(p.name+" "+p.id+" "+p.coll+" "+p.fabric_group).toLowerCase().includes(q);
+// Search looks at name, code, type, fabric, category, collection, occasion, colours and description;
+// every word must match ("silk saree", "red anarkali"). Plurals match too (sarees = saree).
+const hay=p=>p._h||(p._h=[p.name,p.id,p.coll,p.fabric_group,p.homecoll,(CATS.find(c=>c[0]===p.category)||[])[1],p.category,p.occ.join(" "),p.cnames.join(" "),p.description].join(" ").toLowerCase());
+const words=q=>q.toLowerCase().split(/[\s,]+/).filter(Boolean).map(w=>w.length>3?w.replace(/(es|s)$/,""):w);
+const hit=(p,q)=>words(q).every(w=>hay(p).includes(w));
+const nameHit=(p,q)=>words(q).every(w=>(p.name+" "+p.id).toLowerCase().includes(w));
 function priceOK(p){if(!sel.price)return true;const [a,b]=sel.price.split("-");return p.price>=(+a||0)&&(!b||p.price<=+b)}
 const FIRST=20, MORE=10;
 function render(keep){
   if(!keep)state.shown=FIRST;
-  if(!inCat().length){
+  const searching=!!$("#q").value.trim();
+  document.body.classList.toggle("searching",searching);
+  document.querySelectorAll(".nav a[data-cat]").forEach(a=>a.setAttribute("aria-current",!searching&&a.dataset.cat===state.cat?"true":"false"));
+  if(!inCat().length&&!searching){
     $("#count").textContent="Coming soon";$("#active").innerHTML="";
     $("#grid").innerHTML=`<div class="empty"><p>We are adding ${label().toLowerCase()} to the catalogue. Ask us on WhatsApp what is available now.</p><a class="btn wa" href="https://wa.me/${WA}?text=${encodeURIComponent("Hi Tarasvini, do you have "+label().toLowerCase()+" available?")}" target="_blank" rel="noopener">${IC.wa}Ask on WhatsApp</a></div>`;
     return;
   }
   const qv=$("#q").value.trim(), q=qv.toLowerCase(), stock=$("#stock").checked, nw=$("#newonly").checked, so=$("#saleonly").checked, sort=$("#sort").value;
-  let list=state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!sel.occ.size||p.occ.some(o=>sel.occ.has(o)))&&(!sel.home||p.homecoll.toLowerCase()===sel.home.toLowerCase())&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)&&(!q||hit(p,q)));
-  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:pri(a)-pri(b)||(a.i-b.i));
+  // searching: every category; the category filters (type, fabric, occasion) are set aside
+  let list=searching?state.all.filter(p=>hit(p,q)&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)):state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!sel.occ.size||p.occ.some(o=>sel.occ.has(o)))&&(!sel.home||p.homecoll.toLowerCase()===sel.home.toLowerCase())&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)&&(!q||hit(p,q)));
+  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(searching?nameHit(b,q)-nameHit(a,q):0)||pri(a)-pri(b)||(a.i-b.i));
   // chips for what is selected
-  const chips=[...(sel.home?[["home","","Collection: "+sel.home]]:[]),...[...sel.occ].map(v=>["occ",v,v]),...[...sel.type].map(v=>["type",v,v]),...[...sel.fab].map(v=>["fab",v,v])];
-  if(sel.price)chips.push(["price","",PRICES.find(x=>x[0]===sel.price)[1]]);
+  const chips=searching?[]:[...(sel.home?[["home","","Collection: "+sel.home]]:[]),...[...sel.occ].map(v=>["occ",v,v]),...[...sel.type].map(v=>["type",v,v]),...[...sel.fab].map(v=>["fab",v,v])];
+  if(sel.price)chips.push(["price","",(PRICES.concat(QUICK).find(x=>x[0]===sel.price)||["","Price"])[1]]);
+  // quick price buttons above the products (only bands that have products in this category)
+  const pq=$("#pchips");if(pq){const base=(searching?state.all.filter(x=>hit(x,q)):inCat()).filter(x=>!x.sold||!stock),bands=QUICK.map(([v,l])=>[v,l,base.filter(x=>{const [a,b]=v.split("-");return x.price>=(+a||0)&&(!b||x.price<=+b)}).length]).filter(x=>x[2]);
+    pq.innerHTML=bands.length>1?bands.map(([v,l,n])=>`<button class="pchip" type="button" data-pq="${v}" aria-pressed="${sel.price===v}">${l}<small>${n}</small></button>`).join(""):"";pq.hidden=bands.length<2}
   if(nw)chips.push(["newonly","","New arrivals"]);
   if(so)chips.push(["saleonly","","On sale"]);
   if(stock)chips.push(["stock","","In stock only"]);
@@ -310,68 +357,86 @@ function render(keep){
   const n=(sel.home?1:0)+sel.occ.size+sel.type.size+sel.fab.size+(sel.price?1:0)+(stock?1:0)+(nw?1:0)+(so?1:0);
   $("#fcount").textContent=n||"";
   document.querySelectorAll("#occrow .occ").forEach(b=>b.setAttribute("aria-pressed",b.dataset.occ?String(sel.occ.size===1&&sel.occ.has(b.dataset.occ)):String(!sel.occ.size)));
-  $("#fdone").textContent=list.length?`Show ${many(list.length)}`:"No matches";
-  $("#count").textContent=q?`${many(list.length)} matching “${qv}”`:many(list.length);
+  const res=n=>n+(n===1?" result":" results");
+  $("#fdone").textContent=list.length?`Show ${searching?res(list.length):many(list.length)}`:"No matches";
+  $("#shoph").textContent=searching?"Search results":label();
+  if(searching){const by=present().map(c=>[c,list.filter(p=>p.category===c[0]).length]).filter(x=>x[1]);
+    $("#count").textContent=`${res(list.length)} for “${qv}”`+(by.length>1?" · "+by.map(([c,n])=>c[1]+" "+n).join(" · "):"")}
+  else $("#count").textContent=many(list.length);
   state.list=list;
   const left=Math.max(0,list.length-state.shown);
   $("#more").hidden=!left;$("#more").textContent=`Show ${Math.min(MORE,left)} more (${left} left)`;
-  $("#grid").innerHTML=list.length?list.slice(0,state.shown).map(cardHTML).join(""):`<div class="empty"><p>No ${CAT()[3]} match ${q?"“"+esc(qv)+"”":"these filters"}.</p>${q?present().filter(c=>c[0]!==state.cat).map(c=>[c,state.all.filter(p=>p.category===c[0]&&hit(p,q)).length]).filter(x=>x[1]).map(([c,n])=>`<button class="btn" type="button" data-cat="${c[0]}">See ${n} in ${esc(c[1])}</button> `).join(""):""}<button class="btn" type="button" onclick="clearFilters()">Clear filters</button></div>`;
+  $("#grid").innerHTML=list.length?list.slice(0,state.shown).map(cardHTML).join(""):searching?`<div class="empty"><p>Nothing matches “${esc(qv)}”. Try another word, or ask us: we may have it.</p><a class="btn wa" href="https://wa.me/${WA}?text=${encodeURIComponent("Hi Tarasvini, do you have: "+qv+"?")}" target="_blank" rel="noopener">${IC.wa}Ask on WhatsApp</a> <button class="btn" type="button" onclick="clearFilters()">Clear search</button></div>`:`<div class="empty"><p>No ${CAT()[3]} match ${q?"“"+esc(qv)+"”":"these filters"}.</p>${q?present().filter(c=>c[0]!==state.cat).map(c=>[c,state.all.filter(p=>p.category===c[0]&&hit(p,q)).length]).filter(x=>x[1]).map(([c,n])=>`<button class="btn" type="button" data-cat="${c[0]}">See ${n} in ${esc(c[1])}</button> `).join(""):""}<button class="btn" type="button" onclick="clearFilters()">Clear filters</button></div>`;
 }
 // Collapsible filter groups: show how many are picked in each heading; open a group that has a choice
 function groupCounts(){document.querySelectorAll("#fpanel details.fgrp").forEach(d=>{const n=d.querySelectorAll("input:checked:not([value=''])").length;
   const s=d.querySelector("summary");let b=s.querySelector(".gcount");if(!b){b=document.createElement("span");b.className="gcount";s.appendChild(b)}
   b.textContent=n?n:"";b.hidden=!n;if(n)d.open=true})}
 function syncPanel(){setTimeout(groupCounts);document.querySelectorAll("#fpanel [data-f]").forEach(i=>i.checked=sel[i.dataset.f].has(i.value));document.querySelectorAll("#fpanel [name=price]").forEach(i=>i.checked=i.value===sel.price)}
-function openPanel(o){const f=$("#fpanel");f.classList.toggle("is-open",o);$("#ftoggle").setAttribute("aria-expanded",o);document.body.style.overflow=o?"hidden":"";if(o)$("#fclose").focus();else $("#ftoggle").focus()}
+function openPanel(o){const f=$("#fpanel");f.classList.toggle("is-open",o);$("#ftoggle").setAttribute("aria-expanded",o);document.body.style.overflow=o?"hidden":"";document.body.classList.toggle("panel-open",o);if(o)$("#fclose").focus();else $("#ftoggle").focus()}
 const cardHTML=p=>`
-    <article class="card${p.sold?" is-sold":""}">
-      <button class="open" type="button" data-id="${esc(p.id)}" aria-label="${esc(p.name)}, ${p.price?inr(p.price):""}">
+    <article class="card${p.sold?" is-sold":""}" data-id="${esc(p.id)}">${heartHTML(p.id)}
+      <a class="open" href="${prodPath(p)}" data-id="${esc(p.id)}" aria-label="${esc(p.name)}, ${p.price?inr(p.price):""}">
         ${ph(p)}
         <div class="info">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<h3>${esc(p.name)}</h3>
           <div class="prow"><span class="price">${priceHTML(p)}</span>${cols(p)?`<span class="cols">${cols(p)}</span>`:""}</div></div>
-      </button>
+      </a>
       ${p.sold?'<button class="btn order" type="button" disabled>Sold out</button>':`<a class="btn order" href="${waLink(p)}" target="_blank" rel="noopener">${IC.wa}Order on WhatsApp</a>`}
     </article>`;
 function clearFilters(){$("#q").value="";resetSel();buildFilters()}
-function openDlg(id){
-  const p=state.all.find(x=>x.id===id); if(!p)return;
+// Product details (photos, price, sizes, colours, description, order buttons). Used on the product page.
+function prodHTML(p,h){
   const imgs=p.imgs, v=p.video_url;
   const yt=v&&v.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);
   const vid=!v?"":yt?`<iframe src="https://www.youtube.com/embed/${yt[1]}" allowfullscreen loading="lazy" title="Video"></iframe>`
-    :/\.(mp4|webm)(\?|$)/i.test(v)?`<video src="${esc(v)}" controls playsinline></video>`
+    :/\.(mp4|webm)(\?|$)/i.test(v)||/res\.cloudinary\.com.*\/video\//.test(v)?`<video src="${esc(v)}" controls playsinline preload="metadata"></video>`
     :`<p><a href="${esc(v)}" target="_blank" rel="noopener">Watch the video</a></p>`;
   const sizes=String(p.sizes||"").split(/[,\s]+/).filter(Boolean);
-  const d=$("#dlg");
-  d.innerHTML=`<button class="x" type="button" aria-label="Close" onclick="this.closest('dialog').close()">×</button>
-  <div class="dg"><div class="gal">${ph(p,true,0)}
-    ${imgs.length>1?`<button class="gnav gprev" type="button" aria-label="Previous photo">&#8249;</button><button class="gnav gnext" type="button" aria-label="Next photo">&#8250;</button><div class="thumbs">${imgs.map((u,i)=>`<button type="button" data-i="${i}" aria-label="Photo ${i+1}"><img src="${esc(u)}" alt=""></button>`).join("")}</div>`:""}</div>
-  <div class="body">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<h2>${esc(p.name)}</h2><div class="price">${priceHTML(p)}</div>${(o=>o?`<p class="offerline"><b>${esc(o.headline)}</b><span>${esc(offerLine(o))}. Applied when we confirm your order on WhatsApp.</span></p>`:"")(offerFor(p))}
+  return `<div class="gal">${ph(p,true,0)}
+    ${imgs.length>1?`<button class="gnav gprev" type="button" aria-label="Previous photo">&#8249;</button><button class="gnav gnext" type="button" aria-label="Next photo">&#8250;</button><div class="thumbs">${imgs.map((u,i)=>`<button type="button" data-i="${i}" aria-label="Photo ${i+1}">${imgTag(u,200,"",true)}</button>`).join("")}</div>`:""}</div>
+  <div class="body">${p.coll?`<p class="ty">${esc(p.coll)}</p>`:""}<${h}>${esc(p.name)}</${h}><div class="price">${p.sold?'<span class="soldnote">Sold out</span> ':""}${priceHTML(p)}</div>${(o=>o&&!p.sold?`<p class="offerline"><b>${esc(o.headline)}</b><span>${esc(offerLine(o))}. Applied when we confirm your order on WhatsApp.</span></p>`:"")(offerFor(p))}
     ${sizes.length?`<div class="opt"><h4>Sizes</h4><div class="sizes">${sizes.map(s=>`<span>${esc(s)}</span>`).join("")}</div></div>`:""}
     ${colHTML(p)}${moreHTML(p)}
     ${p.description?`<div class="desc">${descHTML(p.description)}</div>`:""}
     <dl><dt>Code</dt><dd>${esc(p.id)}</dd>
     ${p.fabric_group?`<dt>Fabric</dt><dd>${esc(p.fabric_group)}</dd>`:""}
     ${p.occ.length?`<dt>Occasion</dt><dd>${esc(p.occ.join(", "))}</dd>`:""}
-    ${p.delivery?`<dt>Delivery</dt><dd>${esc(p.delivery)}, working days</dd>`:""}</dl>
+    ${p.delivery?`<dt>Delivery</dt><dd>${esc(String(p.delivery).replace(/\s*days?$/i,""))} working days</dd>`:""}<dt>Shipping</dt><dd>Free across India</dd></dl>
     ${vid}
     <div class="dacts">${p.sold?'<button class="btn" type="button" disabled>Sold out</button>':`<a class="btn wa" href="${waLink(p)}" target="_blank" rel="noopener">${IC.wa}Order on WhatsApp</a>`}
-      <div class="row"><a class="btn" href="${IG_DM}" target="_blank" rel="noopener" data-igcopy="${esc(p.id)}">${IC.ig}Ask on Instagram</a><button class="btn" type="button" data-share="${esc(p.id)}">${IC.sh}Share</button></div></div>
-    <div class="policy"><p><strong>No cash on delivery.</strong> We confirm payment with you on WhatsApp.</p><p>Returns or exchanges only for damaged or wrong items, reported within 24–48 hours with a full, uncut unboxing video.</p></div>
-  </div></div>`;
-  let cur=0;d.onkeydown=null;
-  const show=i=>{cur=(i+imgs.length)%imgs.length;const w=d.querySelector(".gal .ph"),old=w.querySelector("img");if(old)old.remove();
-    const im=document.createElement("img");im.src=imgs[cur];im.alt=p.name+", photo "+(cur+1);im.onerror=()=>im.remove();w.insertBefore(im,w.querySelector(".zari"));
-    d.querySelectorAll(".thumbs button").forEach((b,k)=>b.setAttribute("aria-current",k===cur))};
-  d.querySelectorAll(".thumbs button").forEach(b=>b.onclick=()=>show(+b.dataset.i));
-  if(imgs.length>1){
-    d.querySelector(".gprev").onclick=()=>show(cur-1);d.querySelector(".gnext").onclick=()=>show(cur+1);
-    d.onkeydown=e=>{if(e.key==="ArrowLeft")show(cur-1);if(e.key==="ArrowRight")show(cur+1)};
-    let x0=null;const g=d.querySelector(".gal");
-    g.addEventListener("touchstart",e=>{x0=e.touches[0].clientX},{passive:true});
-    g.addEventListener("touchend",e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;if(Math.abs(dx)>40)show(cur+(dx<0?1:-1));x0=null});
-    show(0);
-  }
-  d.showModal();d.scrollTop=0;
+      ${heartHTML(p.id,true)}<div class="row"><a class="btn" href="${IG_DM}" target="_blank" rel="noopener" data-igcopy="${esc(p.id)}">${IC.ig}Ask on Instagram</a><button class="btn" type="button" data-share="${esc(p.id)}">${IC.sh}Share</button></div></div>
+    <div class="policy"><p><strong>Free shipping across India.</strong> Prepaid orders only, no cash on delivery.</p><p>Returns or exchanges only for damaged or wrong items, reported within 24–48 hours with a full, uncut unboxing video. <a href="shipping-returns.html">Shipping and returns</a></p></div>
+  </div>`}
+// Photo gallery: arrows, thumbnails, swipe on phones, arrow keys
+function wireGal(root,p,keys){
+  const imgs=p.imgs;let cur=0;
+  const g0=root.querySelector(".gal");
+  if(imgs.length&&g0){g0.insertAdjacentHTML("beforeend",'<button class="zbtn" type="button" aria-label="Zoom photo"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M11 8v6M8 11h6"/></svg></button>');
+    g0.addEventListener("click",e=>{if(e.target.closest(".zbtn")||e.target.matches(".ph img"))openZoom(p,cur)})}
+  const show=i=>{cur=(i+imgs.length)%imgs.length;const w=root.querySelector(".gal .ph"),old=w.querySelector("img");if(old)old.remove();
+    const im=document.createElement("img");im.dataset.o=imgs[cur];im.src=pic(imgs[cur],1200);im.alt=p.name+", photo "+(cur+1);im.onerror=()=>pfail(im);w.insertBefore(im,w.querySelector(".zari"));
+    root.querySelectorAll(".thumbs button").forEach((b,k)=>b.setAttribute("aria-current",k===cur))};
+  if(imgs.length<2)return;
+  root.querySelectorAll(".thumbs button").forEach(b=>b.onclick=()=>show(+b.dataset.i));
+  root.querySelector(".gprev").onclick=()=>show(cur-1);root.querySelector(".gnext").onclick=()=>show(cur+1);
+  keys.onkeydown=e=>{if(e.target.closest&&e.target.closest("input,textarea,select"))return;if(e.key==="ArrowLeft")show(cur-1);if(e.key==="ArrowRight")show(cur+1)};
+  let x0=null;const g=root.querySelector(".gal");
+  g.addEventListener("touchstart",e=>{x0=e.touches[0].clientX},{passive:true});
+  g.addEventListener("touchend",e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;if(Math.abs(dx)>40)show(cur+(dx<0?1:-1));x0=null});
+  root.querySelectorAll(".thumbs button")[0].setAttribute("aria-current","true");
+}
+// Catalogue: remember the category, filters and scroll position when a product is opened,
+// so the Back button returns to the same place in the list.
+function saveCat(){try{sessionStorage.setItem("catState",JSON.stringify({cat:state.cat,type:[...sel.type],fab:[...sel.fab],occ:[...sel.occ],price:sel.price,home:sel.home,
+  q:$("#q").value,sort:$("#sort").value,stock:$("#stock").checked,nw:$("#newonly").checked,so:$("#saleonly").checked,shown:state.shown,y:scrollY}))}catch(e){}}
+function restoreCat(){
+  let st=null;try{st=JSON.parse(sessionStorage.getItem("catState")||"null");sessionStorage.removeItem("catState")}catch(e){}
+  const nav=(performance.getEntriesByType&&performance.getEntriesByType("navigation")[0])||{};
+  if(!st||nav.type!=="back_forward"||st.cat!==state.cat)return;
+  ["type","fab","occ"].forEach(k=>{sel[k].clear();(st[k]||[]).forEach(v=>sel[k].add(v))});sel.price=st.price||"";sel.home=st.home||"";
+  $("#q").value=st.q||"";$("#sort").value=st.sort||"featured";$("#stock").checked=!!st.stock;$("#newonly").checked=!!st.nw;$("#saleonly").checked=!!st.so;
+  syncPanel();state.shown=Math.max(FIRST,st.shown||FIRST);render(true);
+  requestAnimationFrame(()=>scrollTo(0,st.y||0));
 }
 
 document.addEventListener("click",e=>{
@@ -383,10 +448,12 @@ document.addEventListener("click",e=>{
     syncPanel();render();return}
   const mo=e.target.closest("[data-more],[data-less]");
   if(mo){const k=mo.dataset.more||mo.dataset.less;optList($(k==="type"?"#o-type":"#o-fab"),k,k==="type"?state.tc:state.fc,!!mo.dataset.more);return}
+  const pqb=e.target.closest("[data-pq]");
+  if(pqb){sel.price=sel.price===pqb.dataset.pq?"":pqb.dataset.pq;syncPanel();render();return}
+  if(e.target.closest("[data-rvclear]")){RV=[];rvSave();rvShow();return}
   const t=e.target.closest("[data-cat]");
   if(t&&!e.metaKey&&!e.ctrlKey){e.preventDefault();setCat(t.dataset.cat,true);return}
-  const o=e.target.closest(".open"); if(o){openDlg(o.dataset.id);return}
-  if(e.target.id==="dlg")e.target.close();
+  if(e.target.closest("a.open"))saveCat();
 });
 document.querySelectorAll("[data-wa]").forEach(a=>a.href=waLink(null));
 const stars=n=>"★".repeat(n)+"☆".repeat(5-n);
@@ -479,13 +546,14 @@ function share(d){
 }
 document.addEventListener("click",e=>{
   const s=e.target.closest("[data-share]");
-  if(s){const p=state.all.find(x=>x.id===s.dataset.share);if(p)share({title:p.name+" | Tarasvini",text:p.name+(p.price?" for "+inr(p.price):"")+" at Tarasvini",url:location.origin+location.pathname+"?item="+encodeURIComponent(p.id)});return}
-  if(e.target.closest("[data-sharesite]"))share({title:"Tarasvini",text:"Sarees, salwar suits, kurtis, gowns and lehengas at Tarasvini",url:location.origin+location.pathname.replace(/[^/]*$/,"")});
+  if(s){const p=state.all.find(x=>x.id===s.dataset.share);if(p)share({title:p.name+" | Tarasvini",text:p.name+(p.price?" for "+inr(p.price):"")+" at Tarasvini",url:itemURL(p)});return}
+  if(e.target.closest("[data-sharesite]"))share({title:"Tarasvini",text:"Sarees, salwars, anarkalis, kurtis, gowns and lehengas at Tarasvini",url:location.origin+location.pathname.replace(/[^/]*$/,"")});
 });
 
 if($("#grid")){
   $("#sort").addEventListener("change",()=>render());
-  $("#q").addEventListener("input",()=>render());
+  let wasEmpty=!$("#q").value.trim();
+  $("#q").addEventListener("input",()=>{const v=$("#q").value.trim();if(v&&wasEmpty){const sh=document.getElementById("shop");if(sh.getBoundingClientRect().top>innerHeight*.6)sh.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})}wasEmpty=!v;render();try{const u=new URL(location.href),v=$("#q").value.trim();if(v)u.searchParams.set("q",v);else u.searchParams.delete("q");history.replaceState(null,"",u)}catch(e){}});
   $("#fpanel").addEventListener("change",e=>{const t=e.target;
     if(t.dataset.f){sel[t.dataset.f][t.checked?"add":"delete"](t.value)}else if(t.name==="price")sel.price=t.value;
     render()});
@@ -551,11 +619,11 @@ loadOffers();
 
 // ---------- "How to order" guide: 3 slides. Opens once on a first visit; reopen from the menu. ----------
 const GUIDE=[
- {c:"#B0185A",h:"Pick your favourite",p:"Browse the catalogue and tap any product to see photos, sizes, colours and the delivery time.",
-  l:["Use the filters to find your occasion","Note the product code shown on each item"],chips:()=>CATS.slice(0,3).map(c=>c[1].split(" ")[0]),
+ {c:"#B0185A",h:"Pick your favourites",p:"Browse the catalogue and tap any product to see photos, sizes, colours and the delivery time.",
+  l:['Tap the <span class="ghrt" aria-hidden="true">&#9829;</span> on any product to save it to your <b>Shortlist</b>',"Use the filters to find your occasion"],chips:()=>CATS.slice(0,2).map(c=>c[1].split(" ")[0]).concat(["\u2665 Shortlist"]),
   svg:'<path d="M20 8h24l8 10-6 6v32H18V24l-6-6z"/><path d="M26 8c0 4 3 7 6 7s6-3 6-7"/>'},
  {c:"#1F8A4C",h:"Order and pay on WhatsApp or Instagram",p:"Tap “Order on WhatsApp” or send us a DM on Instagram. We confirm stock, size and the total, then share the payment details.",
-  l:["Prepaid orders only, no cash on delivery","Pay only to the details we send you"],chips:()=>["WhatsApp","Instagram"],
+  l:["Liked a few? Open your <b>Shortlist</b> and send them all in one message","Prepaid orders only, no cash on delivery","Pay only to the details we send you"],chips:()=>["WhatsApp","Instagram"],
   svg:'<path d="M54 31a22 22 0 0 1-32.7 19.2L10 54l4-11A22 22 0 1 1 54 31z"/><path d="M25 25c1 6 6 11 12 12l3-3-5-3-2 2c-2.5-1-4.5-3-5.5-5.5l2-2-3-5z"/>'},
  {c:"#E39B12",h:"Delivery and unboxing",p:"Your order reaches you in 7–15 working days.",
   l:["Record a full, uncut unboxing video","Damaged or wrong item? Tell us within 24–48 hours with the video"],chips:()=>["7–15 days"],
@@ -567,7 +635,7 @@ function openGuide(){
     let x0=null;d.addEventListener("touchstart",e=>x0=e.touches[0].clientX,{passive:true});
     d.addEventListener("touchend",e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;x0=null;if(Math.abs(dx)>50)show(d.i+(dx<0?1:-1))});
     d.addEventListener("keydown",e=>{if(e.key==="ArrowRight")show(d.i+1);if(e.key==="ArrowLeft")show(d.i-1)});
-    d.addEventListener("close",()=>{try{localStorage.setItem("guideSeen","1")}catch(e){}});
+    d.addEventListener("close",()=>{try{localStorage.setItem("guideSeen2","1")}catch(e){}});
   }
   const show=i=>{if(i<0||i>=GUIDE.length)return;d.i=i;const s=GUIDE[i],last=i===GUIDE.length-1;d.style.setProperty("--gc",s.c);
     d.innerHTML=`<button class="gx" type="button" aria-label="Close">×</button>
@@ -588,9 +656,192 @@ function openGuide(){
   if(sep){const a=document.createElement("a");a.className="pg";a.href="#how-to-order";a.textContent="How to order";sep.after(a)}
   document.addEventListener("click",e=>{const l=e.target.closest('a[href$="#how-to-order"]');if(l&&!e.metaKey&&!e.ctrlKey){e.preventDefault();openGuide()}});
   if(location.hash==="#how-to-order"){openGuide();return}
-  let seen=false;try{seen=!!localStorage.getItem("guideSeen")}catch(e){seen=true}
+  let seen=false;try{seen=!!localStorage.getItem("guideSeen2")}catch(e){seen=true}
   // first visit only; never on top of a shared product link
   if(!seen&&!new URLSearchParams(location.search).get("item")&&!document.querySelector(".pdp"))setTimeout(()=>{const p=$("#dlg");if(!(p&&p.open))openGuide()},2000);
 })();
 
 if($("#fpanel"))$("#fpanel").addEventListener("change",()=>setTimeout(groupCounts));
+
+// ---------- Product and category pages (/p/...html, sarees.html, ...) ----------
+// These pages are created on each deploy, so their prices can be out of date. When a page opens,
+// the latest price, sale price, Sold out and offer are read from the Google Sheet and put on the page.
+// If the sheet cannot be reached (saved copy in use), the page is left as it was built.
+if(!$("#grid")&&catsReady)catsReady.then(recs=>{if(!recs||!recs.length)return;if(!state.all.length)state.all=recs.map(norm);collFooter();collPage();newPage();if(!document.querySelector(".pdp"))return;rvShow()}).catch(()=>{});
+if(!$("#grid")&&catsReady&&document.querySelector(".pdp,article.card[data-id]"))Promise.all([catsReady,offersReady]).then(([recs])=>{
+  if(!recs||!recs.length)return;
+  const pd0=document.querySelector(".pdp");
+  // saved copy in use: keep built pages as they are; only a page without built details uses it
+  if(state.backup&&!(pd0&&!pd0.dataset.id))return;
+  const byId={};recs.forEach((o,i)=>{byId[o.id]=norm(o,i)});state.all=Object.values(byId);
+  const orderBtn=(p,cls)=>p.sold?`<button class="btn${cls==="order"?" order":""}" type="button" disabled>Sold out</button>`:`<a class="btn ${cls}" href="${waLink(p)}" target="_blank" rel="noopener">${IC.wa}Order on WhatsApp</a>`;
+  const setTags=(ph,p)=>{if(!ph)return;const t=ph.querySelector(".tags");if(t)t.remove();const n=tags(p);if(n)ph.insertAdjacentHTML("beforeend",n)};
+  // product page: show the full, live details (same as the catalogue). The page found by its code,
+  // or for a product added after the last deploy, by the end of the address (/p/<name>-<code>.html).
+  const pd=document.querySelector(".pdp");
+  if(pd){
+    const want=pd.dataset.id||new URLSearchParams(location.search).get("item")||"";
+    const path=(location.pathname.match(/\/p\/([^/]+?)(?:\.html)?$/)||[])[1]||"";
+    const p=byId[want]||state.all.filter(x=>path&&(path===slugify(x.id)||path.endsWith("-"+slugify(x.id)))).sort((a,b)=>slugify(b.id).length-slugify(a.id).length)[0];
+    if(p)showPDP(pd,p);
+    else if(!pd.dataset.id)pd.innerHTML=`<div class="empty"><p>This product is no longer in our catalogue.</p><a class="btn primary" href="index.html">See all products</a> <a class="btn" href="https://wa.me/${WA}" target="_blank" rel="noopener">${IC.wa}Ask on WhatsApp</a></div>`;
+  }
+  // product cards ("More kurtis", category pages)
+  document.querySelectorAll("article.card[data-id]").forEach(c=>{const q=byId[c.dataset.id];if(!q)return;
+    c.classList.toggle("is-sold",q.sold);const pr=c.querySelector(".price");if(pr)pr.innerHTML=priceHTML(q);
+    setTags(c.querySelector(".ph"),q);const b=c.querySelector(".btn.order");if(b)b.outerHTML=orderBtn(q,"order")});
+}).catch(()=>{});
+
+// ---------- Shortlist: customers tap the heart on products they like, then send the whole list ----------
+// Saved in the customer's own browser only (nothing is sent to us until they press Send).
+const SL_MAX=20;
+let SL=[];try{SL=JSON.parse(localStorage.getItem("shortlist")||"[]").filter(x=>typeof x==="string").slice(0,SL_MAX)}catch(e){}
+const slSave=()=>{try{localStorage.setItem("shortlist",JSON.stringify(SL))}catch(e){}};
+function heartHTML(id,big){const on=SL.includes(id);
+  return `<button class="heart${big?" big":""}" type="button" data-heart="${esc(id)}" aria-pressed="${on}" aria-label="${on?"Remove from":"Add to"} shortlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.4-4.5-9.2-9.1C1.6 7.6 3.7 4.5 7 4.5c2 0 3.4 1.1 5 3 1.6-1.9 3-3 5-3 3.3 0 5.4 3.1 4.2 6.4C19.4 15.5 12 20 12 20z"/></svg>${big?`<span>${on?"In your shortlist":"Add to shortlist"}</span>`:""}</button>`}
+function slSync(){
+  document.querySelectorAll("[data-heart]").forEach(b=>{const on=SL.includes(b.dataset.heart);b.setAttribute("aria-pressed",on);b.setAttribute("aria-label",(on?"Remove from":"Add to")+" shortlist");
+    const t=b.querySelector("span");if(t)t.textContent=on?"In your shortlist":"Add to shortlist"});
+  const pill=$("#slpill");if(pill){pill.hidden=!SL.length;pill.querySelector("b").textContent=SL.length}}
+const getProds=()=>state.all.length?Promise.resolve(state.all):(catsReady||readCatalogue()).then(r=>(r||[]).map(norm));
+// floating buttons on every page: shortlist (when it has something) and WhatsApp chat
+(function(){
+  const f=document.createElement("div");f.className="fab";
+  f.innerHTML=`<button class="slpill" id="slpill" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.4-4.5-9.2-9.1C1.6 7.6 3.7 4.5 7 4.5c2 0 3.4 1.1 5 3 1.6-1.9 3-3 5-3 3.3 0 5.4 3.1 4.2 6.4C19.4 15.5 12 20 12 20z"/></svg>Shortlist <b>0</b></button><a class="wafab" href="${waLink(null)}" target="_blank" rel="noopener" aria-label="Chat with us on WhatsApp">${IC.wa}</a>`;
+  document.body.appendChild(f);
+  // product cards on product and category pages get a heart too
+  document.querySelectorAll("article.card[data-id]").forEach(c=>{if(!c.querySelector("[data-heart]"))c.insertAdjacentHTML("afterbegin",heartHTML(c.dataset.id))});
+  const pd=document.querySelector(".pdp[data-id]"),da=pd&&pd.querySelector(".dacts > .btn");
+  if(da)da.insertAdjacentHTML("afterend",heartHTML(pd.dataset.id,true));
+  slSync();
+})();
+document.addEventListener("click",e=>{
+  const h=e.target.closest("[data-heart]");
+  if(h){e.preventDefault();e.stopPropagation();const id=h.dataset.heart,on=SL.includes(id);
+    if(on)SL=SL.filter(x=>x!==id);else{if(SL.length>=SL_MAX){toast("Your shortlist is full ("+SL_MAX+" items). Remove one to add more.",3500);return}SL.push(id)}
+    slSave();slSync();if(!on)toast("Added to your shortlist ♥");if($("#sl")&&$("#sl").open)slRender();return}
+  if(e.target.closest("#slpill"))openShortlist();
+},true);
+addEventListener("storage",e=>{if(e.key==="shortlist"){try{SL=JSON.parse(e.newValue||"[]")}catch(x){SL=[]}slSync()}});
+function slMsg(items,total){
+  const o=OFFERS.find(o=>o.offer_code&&(!num(o.min_order)||total>=num(o.min_order)));
+  return [pic(items[0].imgs[0]||"",600),"Hi Tarasvini, I'd like to order these from my shortlist:",""].filter((x,i)=>x||i).concat(
+    items.map((p,i)=>[(i+1)+". "+p.name,"Code: "+p.id+(p.price?" · "+inr(p.price):""),"Link: "+itemURL(p),""].join("\n")),
+    ["Total: "+inr(total)+" ("+items.length+(items.length===1?" item)":" items)"),o?"Offer: "+o.offer_code+(pctText(o.discount)?" ("+pctText(o.discount)+" off)":""):"","Size and colour: ","Please confirm availability and delivery."].filter(Boolean)).join("\n")}
+function slRender(){
+  const d=$("#sl");getProds().then(all=>{
+    const by={};all.forEach(p=>by[p.id]=p);
+    const gone=SL.filter(id=>!by[id]);if(gone.length&&all.length){SL=SL.filter(id=>by[id]);slSave();slSync()}
+    const list=SL.map(id=>by[id]).filter(Boolean),ok=list.filter(p=>!p.sold),total=ok.reduce((a,p)=>a+(p.price||0),0);
+    d.querySelector(".slbody").innerHTML=!list.length?`<p class="slempty">Tap the heart on any product to save it here. Then send your whole shortlist to us in one message.</p>`:
+      `<ul class="sllist">${list.map(p=>`<li${p.sold?' class="is-sold"':""}><a href="${prodPath(p)}">${p.imgs[0]?imgTag(p.imgs[0],200,"",true):`<span class="slph">${esc(p.id)}</span>`}</a>
+        <div><a class="slname" href="${prodPath(p)}">${esc(p.name)}</a><small>Code ${esc(p.id)}</small><span class="price">${p.sold?"Sold out":priceHTML(p)}</span></div>
+        <button class="slx" type="button" data-heart="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">×</button></li>`).join("")}</ul>
+      <div class="sltotal"><span>${ok.length} ${ok.length===1?"item":"items"}${list.length>ok.length?" (sold out items not included)":""}</span><b>${inr(total)}</b></div>
+      ${ok.length?`<a class="btn wa" href="https://wa.me/${WA}?text=${encodeURIComponent(slMsg(ok,total))}" target="_blank" rel="noopener">${IC.wa}Send shortlist on WhatsApp</a>
+      <button class="btn" type="button" id="slig">${IC.ig}Send on Instagram</button>`:""}
+      <p class="slnote">Tell us your size and colour in the chat. <button class="linkbtn" type="button" id="slclr">Clear shortlist</button></p>`;
+    const ig=d.querySelector("#slig");if(ig)ig.onclick=()=>{copyText(slMsg(ok,total));toast("Shortlist copied. Paste it in the Instagram chat.",4000);window.open(IG_DM,"_blank","noopener")};
+    const c=d.querySelector("#slclr");if(c)c.onclick=()=>{SL=[];slSave();slSync();slRender()};
+  }).catch(()=>{d.querySelector(".slbody").innerHTML='<p class="slempty">Your shortlist could not be loaded right now. Please refresh the page.</p>'});
+}
+function openShortlist(){
+  let d=$("#sl");
+  if(!d){d=document.createElement("dialog");d.id="sl";d.setAttribute("aria-label","Your shortlist");
+    d.innerHTML='<button class="x" type="button" aria-label="Close" onclick="this.closest(\'dialog\').close()">×</button><div class="slwrap"><h2>Your shortlist</h2><div class="slbody"><p class="slempty">Loading…</p></div></div>';
+    d.addEventListener("click",e=>{if(e.target===d)d.close()});document.body.appendChild(d)}
+  slRender();d.showModal();
+}
+
+function showPDP(pd,p){
+  pd.dataset.id=p.id;rvAdd(p.id);
+  pd.innerHTML=`<div class="dg">${prodHTML(p,"h1")}</div>`;
+  wireGal(pd,p,document);
+  document.title=p.name+(p.price?" | "+inr(p.price):"")+" | Tarasvini";
+  const cat=CATS.find(c=>c[0]===p.category)||catInfo(p.category);
+  const cr=document.querySelector(".crumbs");
+  if(cr&&!cr.children.length)cr.innerHTML=`<a href="/">Home</a><span aria-hidden="true">›</span><a href="index.html?cat=${encodeURIComponent(cat[0])}">${esc(cat[1])}</a><span aria-hidden="true">›</span><span aria-current="page">${esc(p.name)}</span>`;
+  if(!document.querySelector(".related")){
+    const more=state.all.filter(x=>x.category===p.category&&x!==p&&!x.sold).sort((a,b)=>((b.coll===p.coll)-(a.coll===p.coll))||pri(a)-pri(b)||(a.i-b.i)).slice(0,8);
+    if(more.length)pd.insertAdjacentHTML("afterend",`<section class="wrap shop related"><div class="shophead"><h2>More ${esc(cat[3])}</h2><a class="btn" href="index.html?cat=${encodeURIComponent(cat[0])}">See all ${esc(cat[3])}</a></div><div class="grid">${more.map(cardHTML).join("")}</div></section>`);
+  }
+  document.querySelectorAll('script[type="application/ld+json"]').forEach(s=>{try{const j=JSON.parse(s.textContent);if(j["@type"]==="Product"&&j.offers){
+    j.offers.price=p.price.toFixed(2);j.offers.availability="https://schema.org/"+(p.sold?"OutOfStock":"InStock");s.textContent=JSON.stringify(j).replace(/</g,"\\u003c")}}catch(e){}});
+  rvShow();slSync();
+}
+
+// ---------- Photo zoom: tap or click the big photo; tap again to zoom in, move to look around ----------
+function openZoom(p,start){
+  let d=$("#zoom");
+  if(!d){d=document.createElement("dialog");d.id="zoom";d.setAttribute("aria-label","Photo zoom");
+    d.innerHTML='<button class="zx" type="button" aria-label="Close">×</button><div class="zwrap"><img alt=""></div><button class="zn zp" type="button" aria-label="Previous photo">&#8249;</button><button class="zn zf" type="button" aria-label="Next photo">&#8250;</button><p class="zhint"></p>';
+    document.body.appendChild(d);d.querySelector(".zx").onclick=()=>d.close();
+    const img=d.querySelector("img"),wrap=d.querySelector(".zwrap");
+    const at=e=>{const r=img.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*100,y=(e.clientY-r.top)/r.height*100;img.style.transformOrigin=Math.max(0,Math.min(100,x))+"% "+Math.max(0,Math.min(100,y))+"%"};
+    img.addEventListener("click",e=>{d.z=!d.z;img.classList.toggle("z",d.z);at(e);d.hint()});
+    wrap.addEventListener("pointermove",e=>{if(d.z&&(e.pointerType==="mouse"||e.buttons||e.pointerType==="touch"))at(e)});
+    wrap.addEventListener("click",e=>{if(e.target===wrap)d.close()});
+    let x0=null;wrap.addEventListener("touchstart",e=>{x0=d.z?null:e.touches[0].clientX},{passive:true});
+    wrap.addEventListener("touchend",e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;x0=null;if(Math.abs(dx)>50)d.go(d.i+(dx<0?1:-1))});
+    d.addEventListener("keydown",e=>{if(e.key==="ArrowRight")d.go(d.i+1);if(e.key==="ArrowLeft")d.go(d.i-1)});
+    d.querySelector(".zp").onclick=()=>d.go(d.i-1);d.querySelector(".zf").onclick=()=>d.go(d.i+1);
+  }
+  const img=d.querySelector("img");
+  d.hint=()=>{d.querySelector(".zhint").textContent=(d.p.imgs.length>1?"Photo "+(d.i+1)+" of "+d.p.imgs.length+" · ":"")+(d.z?"Move to look around · tap to zoom out":"Tap the photo to zoom in")};
+  d.go=i=>{const n=d.p.imgs.length;d.i=(i+n)%n;d.z=false;img.classList.remove("z");img.dataset.o=d.p.imgs[d.i];img.onerror=()=>{if(img.dataset.o&&img.src!==img.dataset.o)img.src=img.dataset.o};img.src=pic(d.p.imgs[d.i],1600);img.alt=d.p.name+", photo "+(d.i+1);d.hint()};
+  d.p=p;d.querySelectorAll(".zn").forEach(b=>b.hidden=p.imgs.length<2);d.go(start||0);
+  if(!d.open)d.showModal();
+}
+
+// ---------- Recently viewed: the last products this customer opened (kept in their own browser) ----------
+const RV_MAX=12;
+let RV=[];try{RV=JSON.parse(localStorage.getItem("recent")||"[]").filter(x=>typeof x==="string").slice(0,RV_MAX)}catch(e){}
+const rvSave=()=>{try{localStorage.setItem("recent",JSON.stringify(RV))}catch(e){}};
+function rvAdd(id){RV=[id].concat(RV.filter(x=>x!==id)).slice(0,RV_MAX);rvSave()}
+function rvShow(){
+  let box=$("#recent");const pd=document.querySelector(".pdp"),cur=pd&&pd.dataset.id;
+  if(!box){const at=pd?document.querySelector(".related")||pd:null;if(!at||!state.all.length)return;
+    box=document.createElement("section");box.id="recent";box.className="wrap feat rv";at.after(box)}
+  const by={};state.all.forEach(p=>by[p.id]=p);
+  const list=RV.filter(id=>id!==cur&&by[id]).map(id=>by[id]).slice(0,10);
+  box.hidden=!list.length;if(!list.length)return;
+  box.innerHTML=`<div class="fhead"><h2>Recently viewed</h2><button class="linkbtn" type="button" data-rvclear>Clear</button></div><div class="ftrack rvtrack">${list.map(cardHTML).join("")}</div>`;
+}
+document.addEventListener("click",e=>{if(!$("#grid")&&e.target.closest("[data-rvclear]")){RV=[];rvSave();rvShow()}});
+(function(){const pd=document.querySelector(".pdp[data-id]");if(pd)rvAdd(pd.dataset.id)})();
+
+// ---------- Collections (Home Collection column): footer links and the page for a new collection ----------
+function collNames(){const m=new Map();state.all.filter(p=>p.homecoll&&!p.sold).forEach(p=>m.set(p.homecoll.toLowerCase(),p.homecoll));return [...m.values()]}
+function collFooter(){
+  const f=document.querySelector("footer .fgrid");if(!f||!state.all.length)return;
+  let d=f.querySelector(".fcoll");const names=collNames();
+  if(!names.length){if(d)d.remove();return}
+  if(!d){d=document.createElement("div");d.className="fcoll";const shop=[...f.children].find(x=>(x.querySelector("h3")||{}).textContent==="Shop");(shop||f.firstElementChild).after(d)}
+  d.innerHTML="<h3>Collections</h3>"+names.map(n=>`<a href="/collections/${slugify(n)||"collection"}.html">${esc(n)}</a>`).join("");
+}
+function collPage(){
+  const box=document.querySelector(".collpage");if(!box||box.dataset.coll)return;
+  const sl=(location.pathname.match(/\/collections\/([^/]+?)(?:\.html)?$/)||[])[1]||new URLSearchParams(location.search).get("c")||"";
+  const name=collNames().find(n=>(slugify(n)||"collection")===sl);
+  const h=document.querySelector(".pagehead h1"),cr=document.querySelector(".crumbs");
+  if(!name){box.innerHTML='<div class="empty"><p>This collection is not on the website right now.</p><a class="btn primary" href="index.html">See all products</a></div>';return}
+  const items=state.all.filter(p=>p.homecoll.toLowerCase()===name.toLowerCase()).sort((a,b)=>pri(a)-pri(b)||(a.i-b.i));
+  document.title=name+" Collection | Tarasvini";if(h)h.textContent=name+" collection";
+  if(cr)cr.innerHTML=`<a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">${esc(name)} collection</span>`;
+  box.dataset.coll=name;box.innerHTML=`<p class="catintro">Our ${esc(name)} collection: ${items.length} ${items.length===1?"style":"styles"}. Free shipping across India. Tap any product to see photos and details, then order on WhatsApp.</p><div class="grid">${items.map(cardHTML).join("")}</div>`;
+}
+
+// ---------- New arrivals page (/new-arrivals.html): every product marked New Arrival, live from the sheet ----------
+function newPage(){
+  const box=document.querySelector(".newpage");if(!box)return;
+  const all=state.all.filter(p=>p.isnew).sort((a,b)=>pri(a)-pri(b)||(a.i-b.i));
+  if(!all.length){box.innerHTML='<div class="empty"><p>New arrivals are coming soon. Follow us on Instagram to see them first.</p><a class="btn primary" href="index.html">See all products</a> <a class="btn" href="https://www.instagram.com/tarasvini/" target="_blank" rel="noopener">'+IC.ig+'Instagram</a></div>';return}
+  const cats=present().map(c=>[c,all.filter(p=>p.category===c[0]).length]).filter(x=>x[1]);
+  let cur="";
+  const draw=()=>{const list=cur?all.filter(p=>p.category===cur):all;
+    box.innerHTML=`<p class="catintro">${all.length} new ${all.length===1?"style":"styles"} just arrived. Tap any product to see photos and details, then order on WhatsApp.</p>
+    ${cats.length>1?`<div class="pchips" role="group" aria-label="Category"><button class="pchip" type="button" data-nc="" aria-pressed="${!cur}">All<small>${all.length}</small></button>${cats.map(([c,n])=>`<button class="pchip" type="button" data-nc="${esc(c[0])}" aria-pressed="${cur===c[0]}">${esc(c[1])}<small>${n}</small></button>`).join("")}</div>`:""}
+    <div class="grid">${list.map(cardHTML).join("")}</div>`;
+    box.querySelectorAll("[data-nc]").forEach(b=>b.onclick=()=>{cur=b.dataset.nc;draw()});slSync()};
+  draw();
+}
