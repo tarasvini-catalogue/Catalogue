@@ -31,7 +31,7 @@ function buildNav(){
   if(h){const d=h.parentNode;d.querySelectorAll("a").forEach(a=>a.remove());if(HASNEW){const a=document.createElement("a");a.href="/new-arrivals.html";a.textContent="New arrivals";d.appendChild(a)}CATS.forEach(c=>{const a=document.createElement("a");a.href="index.html?cat="+encodeURIComponent(c[0]);a.textContent=c[1];d.appendChild(a)})}
 }
 // Sheet headings the site understands (any capitals, spaces or dashes): heading -> internal name
-const ALIAS={home_collection:"homecoll",homepage_collection:"homecoll",highlight:"homecoll",occasion:"occ",occasions:"occ",occasion_wear:"occ",wear:"occ",sale_price:"sale",offer_price:"sale",discount_price:"sale",show_on_website:"show",show_on_site:"show",show:"show",on_website:"show",website:"show",new_arrival:"isnew",new_arrivals:"isnew",new:"isnew",product_code:"id",code:"id",model_no:"id",product_name:"name",sub_category:"collection",subcategory:"collection",type:"collection",fabric:"fabric_group",colours:"colours",colors:"colours",number_of_colours:"colours",selling_price:"price",availability:"available",photo_1:"image_url",photo_2:"image_url_2",photo_3:"image_url_3",video:"video_url"};
+const ALIAS={date_added:"added",added_on:"added",added:"added",added_date:"added",date:"added",home_collection:"homecoll",homepage_collection:"homecoll",highlight:"homecoll",occasion:"occ",occasions:"occ",occasion_wear:"occ",wear:"occ",sale_price:"sale",offer_price:"sale",discount_price:"sale",show_on_website:"show",show_on_site:"show",show:"show",on_website:"show",website:"show",new_arrival:"isnew",new_arrivals:"isnew",new:"isnew",product_code:"id",code:"id",model_no:"id",product_name:"name",sub_category:"collection",subcategory:"collection",type:"collection",fabric:"fabric_group",colours:"colours",colors:"colours",number_of_colours:"colours",selling_price:"price",availability:"available",photo_1:"image_url",photo_2:"image_url_2",photo_3:"image_url_3",video:"video_url"};
 const hkey=h=>{const k=String(h).trim().toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");return ALIAS[k]||k};
 const catKey=v=>catInfo(v)[0];
 const CAT=()=>CATS.find(c=>c[0]===state.cat);
@@ -39,7 +39,12 @@ const label=()=>CAT()[1];
 const many=n=>n+" "+(n===1?CAT()[2]:CAT()[3]);
 // Colours: a number (6) or colour names (Red, Blue, Green). At most 3 are shown; with more, customers are asked to DM.
 // Default order everywhere: New Arrival, Featured, Home Collection ("premium" collections), products with photos, the rest; sold out last
-const pri=p=>p.sold?9:p.isnew?0:p.feat?1:p.homecoll?2:p.imgs.length?3:4;
+// Order everywhere: newest products first ("Date Added" column if there is one, otherwise rows lower
+// down in each tab count as newer). Products without a photo yet come after, sold out last.
+// any page opened in this visit counts as having arrived, so Home is not sent to New arrivals later
+try{sessionStorage.setItem("landed","1")}catch(e){}
+const pri=p=>p.sold?9:p.imgs.length?0:5;
+const newer=(a,b)=>(b.added-a.added)||(a.fromEnd-b.fromEnd)||(b.i-a.i);
 const colInfo=v=>{v=String(v||"").trim();if(/^\d+$/.test(v))return{colours:+v,cnames:[]};const n=v.split(/[,;\/|]+/).map(x=>x.trim()).filter(Boolean);return{colours:n.length,cnames:n}};
 const cols=p=>p.colours>3?"More colours":p.cnames.length>1?p.cnames.join(", "):p.colours>1?p.colours+" colours":"";
 const and=a=>a.length>1?a.slice(0,-1).join(", ")+" and "+a[a.length-1]:a.join("");
@@ -150,7 +155,7 @@ function parseCat(texts){
   {
     const seen=new Set();let recs=[],hasShow=false;
     texts.forEach(t=>{const rows=parseCSV(t),head=rows[0].map(hkey);if(head.includes("show"))hasShow=true;
-      rows.slice(1).forEach(r=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());
+      rows.slice(1).forEach((r,ri)=>{const o={};head.forEach((h,i)=>o[h]=(r[i]||"").trim());o._end=rows.length-2-ri;
         if(o.id&&o.name&&!/^hid/i.test(o.available)&&!seen.has(o.id)){seen.add(o.id);recs.push(o)}})});
     // "Show on Website": only ticked rows appear. If the column is missing or nothing is ticked yet, everything shows.
     if(hasShow&&recs.some(o=>yes(o.show)))recs=recs.filter(o=>yes(o.show));
@@ -169,7 +174,7 @@ function offerLine(o){const d=pctText(o.discount),m=num(o.min_order),e=pdate(o.e
   return [d?d+" off":"Special offer",m?"orders above "+inr(m):"",e?"till "+e.toLocaleDateString("en-IN",{day:"numeric",month:"short"}):""].filter(Boolean).join(" ")}
 const catsReady=$("#grid")?null:readCatalogue().catch(()=>{});
 // One product row from the sheet -> the product object used everywhere on the site
-const norm=(o,i)=>({...o,i,category:catKey(o.category),...colInfo(o.colours),
+const norm=(o,i)=>({...o,i,added:(d=>d&&!isNaN(d)?d.getTime():0)(o.added?pdate(o.added):null),fromEnd:+o._end||0,category:catKey(o.category),...colInfo(o.colours),
   ...(()=>{const mrp=num(o.price),sp=num(o.sale);return sp>0&&sp<mrp?{price:sp,was:mrp,onsale:true}:{price:mrp,was:0,onsale:false}})(),
   coll:(c=>c===c.toLowerCase()?title(c):c)(String(o.collection||"").replace(/\s+/g," ").trim()),
   homecoll:(c=>c===c.toLowerCase()?title(c):c)(String(o.homecoll||"").replace(/\s+/g," ").trim()),
@@ -183,7 +188,7 @@ function load(){
     if(state.backup||JSON.stringify(recs)===JSON.stringify(snapRecs))return;
     const keep=state.shown;state.all=recs.map(norm);
     if(!inCat().length&&present().length)setCat(present()[0][0],false);else{buildFilters();state.shown=keep;render(true)}
-    rvShow();collFooter();
+    rvShow();collFooter();buildHome();
   }).catch(()=>{
     if(!first)$("#count").innerHTML='The catalogue did not load. <button class="linkbtn" onclick="location.reload()">Try again</button>';
   });
@@ -196,7 +201,7 @@ function init(){
   if(qs.get("q")){$("#q").value=qs.get("q");if(!m){const best=present().map(c=>[c[0],state.all.filter(p=>p.category===c[0]&&hit(p,qs.get("q").toLowerCase())).length]).sort((a,b)=>b[1]-a[1])[0];if(best&&best[1])state.cat=best[0]}}
   const it=qs.get("item"),ip=it&&state.all.find(x=>x.id===it); if(ip){location.replace(prodPath(ip));return}
   if(!state.all.some(p=>p.category===state.cat)&&present().length)state.cat=present()[0][0];
-  buildHero();
+  buildHero();buildHome();
     setCat(state.cat,false);
   const qo=qs.get("occasion");if(qo){const m2=Object.keys(state.oc||{}).find(o=>o.toLowerCase()===qo.toLowerCase());if(m2){sel.occ.add(m2);syncPanel();render()}}
   if(qs.get("q"))document.getElementById("shop").scrollIntoView();
@@ -249,13 +254,13 @@ function buildHero(){
   if(!list.length){box.closest(".hero").hidden=true;return}
   const catOf=c=>{const n={};c.items.forEach(p=>n[p.category]=(n[p.category]||0)+1);return Object.keys(n).sort((a,b)=>n[b]-n[a])[0]};
   box.innerHTML=list.map((c,i)=>{
-    const its=c.items.slice().sort((a,b)=>pri(a)-pri(b)||(a.i-b.i)).slice(0,4);
+    const its=c.items.slice().sort((a,b)=>pri(a)-pri(b)||newer(a,b)).slice(0,5);
     const k=catOf(c),cl=CATS.find(x=>x[0]===k)||CATS[0],pr=c.items.map(p=>p.price).filter(Boolean);
     return `<div class="hslide"${i?" hidden":""} role="group" aria-roledescription="slide" aria-label="${i+1} of ${list.length}: ${esc(c.name)}">
       <div class="htext"><p class="hcat">${esc(cl[1])}</p><h1>${esc(c.name)}</h1>
         <p>${c.items.length} ${c.items.length===1?cl[2]:cl[3]}${pr.length?" from "+inr(Math.min(...pr)):""}</p>
         <button class="btn primary" type="button" data-hcat="${esc(k)}" data-hcoll="${c.home?"":esc(c.name)}" data-hhome="${c.home?esc(c.name):""}">Shop this collection</button></div>
-      <div class="collage n${its.length}">${its.map(p=>`<a class="open" href="${prodPath(p)}" data-id="${esc(p.id)}" aria-label="${esc(p.name)}">${ph(p,false)}</a>`).join("")}</div></div>`}).join("")+
+      <div class="hrow n${its.length}">${its.map(p=>hcard(p,i>0)).join("")}</div></div>`}).join("")+
     (list.length>1?`<div class="hctl"><button class="hnav hprev" type="button" aria-label="Previous collection">&#8249;</button><div class="hdots">${list.map((c,i)=>`<button type="button" data-h="${i}" aria-label="${esc(c.name)}"${i?"":' aria-current="true"'}></button>`).join("")}</div><button class="hnav hnext" type="button" aria-label="Next collection">&#8250;</button></div>`:"");
   const sl=box.querySelectorAll(".hslide");let cur=0,hold=false;
   const show=i=>{cur=(i+sl.length)%sl.length;sl.forEach((s,k)=>s.hidden=k!==cur);box.querySelectorAll(".hdots button").forEach((b,k)=>b.setAttribute("aria-current",k===cur))};
@@ -289,7 +294,7 @@ const occTile=(v,label,n,c,ic,img)=>`<button class="occ" type="button" data-occ=
 // Photo for an occasion circle: a product from this category and occasion that has a photo,
 // Featured and New Arrival first, avoiding a photo already used by another circle.
 function occPhoto(items,used){
-  const c=items.filter(p=>p.imgs.length&&!p.sold).sort((a,b)=>pri(a)-pri(b)||(a.i-b.i));
+  const c=items.filter(p=>p.imgs.length&&!p.sold).sort((a,b)=>pri(a)-pri(b)||newer(a,b));
   const p=c.find(p=>!used.has(p.id))||c[0];if(!p)return "";used.add(p.id);return p.imgs[0];
 }
 const sel={type:new Set(),fab:new Set(),occ:new Set(),price:"",home:""};
@@ -342,7 +347,7 @@ function render(keep){
   const qv=$("#q").value.trim(), q=qv.toLowerCase(), stock=$("#stock").checked, nw=$("#newonly").checked, so=$("#saleonly").checked, sort=$("#sort").value;
   // searching: every category; the category filters (type, fabric, occasion) are set aside
   let list=searching?state.all.filter(p=>hit(p,q)&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)):state.all.filter(p=>p.category===state.cat&&(!sel.type.size||sel.type.has(p.coll))&&(!sel.fab.size||sel.fab.has(p.fabric_group))&&(!sel.occ.size||p.occ.some(o=>sel.occ.has(o)))&&(!sel.home||p.homecoll.toLowerCase()===sel.home.toLowerCase())&&(!stock||!p.sold)&&(!nw||p.isnew)&&(!so||p.onsale)&&priceOK(p)&&(!q||hit(p,q)));
-  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(searching?nameHit(b,q)-nameHit(a,q):0)||pri(a)-pri(b)||(a.i-b.i));
+  list.sort((a,b)=>sort==="asc"?a.price-b.price:sort==="desc"?b.price-a.price:(searching?nameHit(b,q)-nameHit(a,q):0)||pri(a)-pri(b)||newer(a,b));
   // chips for what is selected
   const chips=searching?[]:[...(sel.home?[["home","","Collection: "+sel.home]]:[]),...[...sel.occ].map(v=>["occ",v,v]),...[...sel.type].map(v=>["type",v,v]),...[...sel.fab].map(v=>["fab",v,v])];
   if(sel.price)chips.push(["price","",(PRICES.concat(QUICK).find(x=>x[0]===sel.price)||["","Price"])[1]]);
@@ -453,7 +458,7 @@ document.addEventListener("click",e=>{
   if(e.target.closest("[data-rvclear]")){RV=[];rvSave();rvShow();return}
   const t=e.target.closest("[data-cat]");
   if(t&&!e.metaKey&&!e.ctrlKey){e.preventDefault();setCat(t.dataset.cat,true);return}
-  if(e.target.closest("a.open"))saveCat();
+  if(e.target.closest("a.open,a.hpc,#cattiles a,#newrow a.open,#bestrow a.open"))saveCat();
 });
 document.querySelectorAll("[data-wa]").forEach(a=>a.href=waLink(null));
 const stars=n=>"★".repeat(n)+"☆".repeat(5-n);
@@ -702,7 +707,8 @@ function heartHTML(id,big){const on=SL.includes(id);
 function slSync(){
   document.querySelectorAll("[data-heart]").forEach(b=>{const on=SL.includes(b.dataset.heart);b.setAttribute("aria-pressed",on);b.setAttribute("aria-label",(on?"Remove from":"Add to")+" shortlist");
     const t=b.querySelector("span");if(t)t.textContent=on?"In your shortlist":"Add to shortlist"});
-  const pill=$("#slpill");if(pill){pill.hidden=!SL.length;pill.querySelector("b").textContent=SL.length}}
+  const pill=$("#slpill");if(pill){pill.hidden=!SL.length;pill.querySelector("b").textContent=SL.length}
+  document.querySelectorAll(".hsl .hbadge").forEach(b=>{b.hidden=!SL.length;b.textContent=SL.length})}
 const getProds=()=>state.all.length?Promise.resolve(state.all):(catsReady||readCatalogue()).then(r=>(r||[]).map(norm));
 // floating buttons on every page: shortlist (when it has something) and WhatsApp chat
 (function(){
@@ -762,7 +768,7 @@ function showPDP(pd,p){
   const cr=document.querySelector(".crumbs");
   if(cr&&!cr.children.length)cr.innerHTML=`<a href="/">Home</a><span aria-hidden="true">›</span><a href="index.html?cat=${encodeURIComponent(cat[0])}">${esc(cat[1])}</a><span aria-hidden="true">›</span><span aria-current="page">${esc(p.name)}</span>`;
   if(!document.querySelector(".related")){
-    const more=state.all.filter(x=>x.category===p.category&&x!==p&&!x.sold).sort((a,b)=>((b.coll===p.coll)-(a.coll===p.coll))||pri(a)-pri(b)||(a.i-b.i)).slice(0,8);
+    const more=state.all.filter(x=>x.category===p.category&&x!==p&&!x.sold).sort((a,b)=>((b.coll===p.coll)-(a.coll===p.coll))||pri(a)-pri(b)||newer(a,b)).slice(0,8);
     if(more.length)pd.insertAdjacentHTML("afterend",`<section class="wrap shop related"><div class="shophead"><h2>More ${esc(cat[3])}</h2><a class="btn" href="index.html?cat=${encodeURIComponent(cat[0])}">See all ${esc(cat[3])}</a></div><div class="grid">${more.map(cardHTML).join("")}</div></section>`);
   }
   document.querySelectorAll('script[type="application/ld+json"]').forEach(s=>{try{const j=JSON.parse(s.textContent);if(j["@type"]==="Product"&&j.offers){
@@ -825,7 +831,7 @@ function collPage(){
   const name=collNames().find(n=>(slugify(n)||"collection")===sl);
   const h=document.querySelector(".pagehead h1"),cr=document.querySelector(".crumbs");
   if(!name){box.innerHTML='<div class="empty"><p>This collection is not on the website right now.</p><a class="btn primary" href="index.html">See all products</a></div>';return}
-  const items=state.all.filter(p=>p.homecoll.toLowerCase()===name.toLowerCase()).sort((a,b)=>pri(a)-pri(b)||(a.i-b.i));
+  const items=state.all.filter(p=>p.homecoll.toLowerCase()===name.toLowerCase()).sort((a,b)=>pri(a)-pri(b)||newer(a,b));
   document.title=name+" Collection | Tarasvini";if(h)h.textContent=name+" collection";
   if(cr)cr.innerHTML=`<a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">${esc(name)} collection</span>`;
   box.dataset.coll=name;box.innerHTML=`<p class="catintro">Our ${esc(name)} collection: ${items.length} ${items.length===1?"style":"styles"}. Free shipping across India. Tap any product to see photos and details, then order on WhatsApp.</p><div class="grid">${items.map(cardHTML).join("")}</div>`;
@@ -834,7 +840,7 @@ function collPage(){
 // ---------- New arrivals page (/new-arrivals.html): every product marked New Arrival, live from the sheet ----------
 function newPage(){
   const box=document.querySelector(".newpage");if(!box)return;
-  const all=state.all.filter(p=>p.isnew).sort((a,b)=>pri(a)-pri(b)||(a.i-b.i));
+  const all=state.all.filter(p=>p.isnew).sort((a,b)=>pri(a)-pri(b)||newer(a,b));
   if(!all.length){box.innerHTML='<div class="empty"><p>New arrivals are coming soon. Follow us on Instagram to see them first.</p><a class="btn primary" href="index.html">See all products</a> <a class="btn" href="https://www.instagram.com/tarasvini/" target="_blank" rel="noopener">'+IC.ig+'Instagram</a></div>';return}
   const cats=present().map(c=>[c,all.filter(p=>p.category===c[0]).length]).filter(x=>x[1]);
   let cur="";
@@ -844,4 +850,74 @@ function newPage(){
     <div class="grid">${list.map(cardHTML).join("")}</div>`;
     box.querySelectorAll("[data-nc]").forEach(b=>b.onclick=()=>{cur=b.dataset.nc;draw()});slSync()};
   draw();
+}
+
+// ---------- Home page sections ----------
+// Product card used in the top banner and the festival banner: full photo, name and price
+function hcard(p,lazy){
+  return `<a class="hpc" href="${prodPath(p)}" data-id="${esc(p.id)}"><span class="im">${p.imgs[0]?imgTag(p.imgs[0],600,p.name,lazy):`<span class="noimg">${esc(p.id)}</span>`}${p.isnew?'<span class="tg">New arrival</span>':p.onsale?'<span class="tg sale">Sale</span>':""}</span><span class="t"><b>${esc(p.name)}</b><span class="price">${priceHTML(p)}</span></span></a>`}
+// A row of product cards with arrows and an optional "View all" link
+function homeRow(id,title,items,more){
+  const box=$("#"+id);if(!box)return;box.hidden=!items.length;if(!items.length)return;
+  box.innerHTML=`<div class="fhead"><h2>${title}</h2><div class="fctl">${more?`<a class="fbtn vall" href="${more}">View all</a>`:""}<button class="fbtn" type="button" data-rs="-1" aria-label="Previous products">&#8249;</button><button class="fbtn" type="button" data-rs="1" aria-label="Next products">&#8250;</button></div></div><div class="ftrack hrtrack">${items.map(cardHTML).join("")}</div>`;
+}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-rs]");if(!b)return;const tr=b.closest("section").querySelector(".hrtrack");if(!tr)return;
+  const c=tr.querySelector(".card"),w=c?c.offsetWidth+parseFloat(getComputedStyle(tr).columnGap||0):300,d=+b.dataset.rs;
+  if(d>0&&tr.scrollLeft+tr.clientWidth>=tr.scrollWidth-4)tr.scrollTo({left:0,behavior:"smooth"});else if(d<0&&tr.scrollLeft<=4)tr.scrollTo({left:tr.scrollWidth,behavior:"smooth"});else tr.scrollBy({left:d*w,behavior:"smooth"})});
+function buildHome(){
+  if(!$("#cattiles"))return;
+  const bypri=(a,b)=>pri(a)-pri(b)||newer(a,b);
+  // Shop by category: one photo tile per category
+  const used=new Set();
+  const tiles=present().map(c=>{const its=state.all.filter(p=>p.category===c[0]&&!p.sold&&p.imgs.length).sort(bypri);
+    const p=its.find(x=>!used.has(x.imgs[0]))||its[0];if(p)used.add(p.imgs[0]);const n=state.all.filter(x=>x.category===c[0]).length;
+    return `<a class="ctile" href="index.html?cat=${encodeURIComponent(c[0])}" data-cat="${esc(c[0])}"><span class="im">${p?imgTag(p.imgs[0],600,"",true):""}</span><span class="cl"><b>${esc(c[1])}</b><small>${n} ${n===1?c[2]:c[3]}</small></span></a>`});
+  const ct=$("#cattiles");ct.hidden=tiles.length<2;ct.innerHTML=`<div class="fhead"><h2>Shop by category</h2></div><div class="ctiles n${tiles.length}">${tiles.join("")}</div>`;
+  // New arrivals and featured rows (all categories)
+  homeRow("newrow","New arrivals",state.all.filter(p=>p.isnew&&!p.sold).sort(bypri).slice(0,12),"/new-arrivals.html");
+  homeRow("bestrow","Featured picks",state.all.filter(p=>p.feat&&!p.sold).sort(bypri).slice(0,12),"");
+  offersReady.then(festival).catch(()=>{});
+}
+// Festival banner: the first live offer from the Offers tab, with products it applies to
+function festival(){
+  const box=$("#festival");if(!box)return;const o=OFFERS[0];if(!o){box.hidden=true;return}
+  const lk=offerLink(o),col=OCOL[String(o.colour||o.color||"").toLowerCase()]||(/^#[0-9a-f]{6}$/i.test(o.colour||"")?o.colour:"#B43C18");
+  let its=state.all.filter(p=>!p.sold&&p.imgs.length&&offerFor(p)===o);
+  const cat=lk&&!lk[1]&&decodeURIComponent((lk[0].match(/[?&]cat=([^&]+)/)||[])[1]||"");if(cat)its=its.filter(p=>p.category===cat);
+  its=its.sort((a,b)=>pri(a)-pri(b)||newer(a,b)).slice(0,3);
+  box.style.setProperty("--fc",col);box.hidden=false;
+  box.innerHTML=`<div class="fest"><div class="ftxt"><p class="fkick">Offer</p><h2>${esc(o.headline)}</h2>${o.details?`<p>${esc(o.details)}</p>`:""}
+    <p class="fmeta">${o.offer_code?`<span class="fcode">Use code <b>${esc(o.offer_code)}</b></span>`:""}<span>${esc(offerLine(o))}</span></p>
+    ${lk?`<a class="btn" href="${esc(lk[0])}"${lk[1]?' target="_blank" rel="noopener"':""}>${esc(o.button_text||"Shop now")}</a>`:""}</div>
+    ${its.length?`<div class="fimgs n${its.length}">${its.map(p=>hcard(p,true)).join("")}</div>`:""}</div>`;
+}
+// Reviews: rating from the reviews sheet and the 3 latest good reviews (real reviews only)
+function homeReviews(){
+  const box=$("#homerev");if(!box||!REVIEWS_URL)return;
+  fetch(REVIEWS_URL).then(r=>r.ok?r.text():"").then(t=>{if(!t)return;const rows=parseCSV(t),head=(rows[0]||[]).map(x=>x.trim().toLowerCase());
+    const list=rows.slice(1).map(r=>{const o={};head.forEach((k,i)=>o[k]=(r[i]||"").trim());return o}).filter(o=>o.message&&o.name&&!/^n/i.test(o.show)).reverse();
+    if(!list.length)return;
+    const rated=list.map(r=>Math.min(5,Math.max(0,parseInt(r.rating)||0))).filter(Boolean),avg=rated.length?rated.reduce((a,b)=>a+b,0)/rated.length:0;
+    const top=list.filter(r=>!(parseInt(r.rating)>0)||parseInt(r.rating)>=4).slice(0,3);
+    const clip=(x,n)=>x.length>n?x.slice(0,n).replace(/\s+\S*$/,"")+"…":x;
+    box.hidden=false;
+    box.innerHTML=`<div class="fhead"><h2>What our customers say</h2><a class="fbtn vall" href="reviews.html">All reviews</a></div>
+      <p class="rsum">${avg?`<span class="st" aria-hidden="true">${stars(Math.round(avg))}</span> <b>${avg.toFixed(1)} out of 5</b> from `:""}${list.length} ${list.length===1?"review":"reviews"}</p>
+      <div class="hrevs">${top.map(r=>{const n=Math.min(5,Math.max(0,parseInt(r.rating)||0));return `<article class="rev">${n?`<div class="st" role="img" aria-label="${n} out of 5 stars">${stars(n)}</div>`:""}<p>${esc(clip(r.message,220))}</p><div class="by">${esc(r.name)}${r.date?" · "+esc(revDate(r.date)):""}</div></article>`}).join("")}</div>`;
+  }).catch(()=>{});
+}
+homeReviews();
+// Header icons on every page: Recently viewed and Shortlist (with a count)
+(function(){const hi=document.querySelector(".hicons");if(!hi||hi.querySelector(".hsl"))return;
+  hi.insertAdjacentHTML("afterbegin",'<button class="ico hrv" type="button" aria-label="Recently viewed"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></button><button class="ico hsl" type="button" aria-label="Shortlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.4-4.5-9.2-9.1C1.6 7.6 3.7 4.5 7 4.5c2 0 3.4 1.1 5 3 1.6-1.9 3-3 5-3 3.3 0 5.4 3.1 4.2 6.4C19.4 15.5 12 20 12 20z"/></svg><span class="hbadge" hidden>0</span></button>');
+  hi.querySelector(".hsl").onclick=openShortlist;hi.querySelector(".hrv").onclick=openRecent;slSync()})();
+function openRecent(){
+  let d=$("#rvd");
+  if(!d){d=document.createElement("dialog");d.id="rvd";d.setAttribute("aria-label","Recently viewed");
+    d.innerHTML='<button class="x" type="button" aria-label="Close" onclick="this.closest(\'dialog\').close()">×</button><div class="slwrap"><h2>Recently viewed</h2><div class="slbody"></div></div>';
+    d.addEventListener("click",e=>{if(e.target===d)d.close()});document.body.appendChild(d)}
+  const body=d.querySelector(".slbody");body.innerHTML='<p class="slempty">Loading…</p>';d.showModal();
+  getProds().then(all=>{const by={};all.forEach(p=>by[p.id]=p);const list=RV.map(id=>by[id]).filter(Boolean);
+    body.innerHTML=list.length?`<ul class="sllist">${list.map(p=>`<li${p.sold?' class="is-sold"':""}><a href="${prodPath(p)}">${p.imgs[0]?imgTag(p.imgs[0],200,"",true):`<span class="slph">${esc(p.id)}</span>`}</a><div><a class="slname" href="${prodPath(p)}">${esc(p.name)}</a><small>Code ${esc(p.id)}</small><span class="price">${p.sold?"Sold out":priceHTML(p)}</span></div><span></span></li>`).join("")}</ul><p class="slnote"><button class="linkbtn" type="button" data-rvclear>Clear the list</button></p>`
+      :'<p class="slempty">Products you open will appear here, so you can find them again easily.</p>'}).catch(()=>{body.innerHTML='<p class="slempty">Could not load right now.</p>'});
 }

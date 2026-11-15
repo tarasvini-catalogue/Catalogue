@@ -35,6 +35,12 @@ const PRELOAD = ['<link rel="preconnect" href="https://res.cloudinary.com">', '<
   .concat(SHEET_TABS.map(g => `<link rel="preload" as="fetch" crossorigin="anonymous" href="${tabURL(g).replace(/&/g, "&amp;")}">`)).concat(BEACON ? [BEACON] : []).join("\n");
 
 // ---------- helpers (same rules as app.js) ----------
+// "Date Added": 12/11/2026, 12-11-2026, 2026-11-12 or a sheet date number
+function addedDate(v) { v = String(v || "").trim(); if (!v) return null;
+  if (/^\d{5}$/.test(v)) return new Date(Date.UTC(1899, 11, 30) + +v * 864e5);
+  let m = v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/); if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+  m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  return null; }
 // Cloudinary photos: right size, light format, top strip with the code label trimmed (CROP_TOP in app.js)
 const pic = (u, w) => { const m = String(u || "").match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(.*)$/);
   if (!m || /^[a-z]{1,4}_[^/]*\//.test(m[2])) return u;
@@ -89,8 +95,8 @@ async function readCatalogue() {
   const seen = new Set(); let recs = [], hasShow = false;
   texts.forEach(t => {
     const rows = parseCSV(t), head = rows[0].map(hkey); if (head.includes("show")) hasShow = true;
-    rows.slice(1).forEach(r => {
-      const o = {}; head.forEach((h, i) => o[h] = (r[i] || "").trim());
+    rows.slice(1).forEach((r, ri) => {
+      const o = {}; head.forEach((h, i) => o[h] = (r[i] || "").trim()); o._end = rows.length - 2 - ri;
       if (o.id && o.name && !/^hid/i.test(o.available) && !seen.has(o.id)) { seen.add(o.id); recs.push(o); }
     });
   });
@@ -101,7 +107,8 @@ async function readCatalogue() {
     const cat = catInfo(o.category);
     const tidy = c => c === c.toLowerCase() ? title(c) : c;
     return {
-      ...o, i, cat, category: cat[0], ...colInfo(o.colours),
+      ...o, i, cat, category: cat[0], ...colInfo(o.colours), fromEnd: +o._end || 0,
+      added: (d => d && !isNaN(d) ? d.getTime() : 0)(addedDate(o.added)),
       price: onsale ? sp : mrp, was: onsale ? mrp : 0, onsale,
       coll: tidy(String(o.collection || "").replace(/\s+/g, " ").trim()),
       homecoll: tidy(String(o.homecoll || "").replace(/\s+/g, " ").trim()),
@@ -150,7 +157,8 @@ function ph(p, cats, eager, idx = 0) {
   return `<div class="ph" style="--c:${c};--t:${t}"><b>${esc(p.id)}</b><span>Photo coming soon</span>${img}${tag}<div class="zari" aria-hidden="true"></div></div>`;
 }
 const card = (p, cats) => `<article class="card${p.sold ? " is-sold" : ""}" data-id="${esc(p.id)}"><a class="open" href="/p/${p.slug}.html">${ph(p, cats, false)}<div class="info">${p.coll ? `<p class="ty">${esc(p.coll)}</p>` : ""}<h3>${esc(p.name)}</h3><div class="prow"><span class="price">${priceHTML(p)}</span>${colText(p) && !p.cnames.length ? `<span class="cols">${esc(colText(p))}</span>` : ""}</div></div></a>${p.sold ? '<button class="btn order" type="button" disabled>Sold out</button>' : `<a class="btn order" href="${waLink(p)}" target="_blank" rel="noopener">${WA_ICON}Order on WhatsApp</a>`}</article>`;
-const order = (a, b) => (a.sold - b.sold) || (b.isnew - a.isnew) || (b.feat - a.feat) || ((b.imgs.length > 0) - (a.imgs.length > 0)) || (a.i - b.i);
+// newest first (same rule as app.js): photos first, sold out last
+const order = (a, b) => (a.sold - b.sold) || ((b.imgs.length > 0) - (a.imgs.length > 0)) || (b.added - a.added) || (a.fromEnd - b.fromEnd) || (b.i - a.i);
 const ld = o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, "\\u003c")}</script>`;
 
 function page({ path, title: t, desc, image, body, schema = [] }) {
@@ -308,11 +316,12 @@ writeFileSync("new-arrivals.html", page({ path: "/new-arrivals.html", title: `Ne
   desc: `The latest arrivals at ${BRAND}: new sarees, salwars, anarkalis and kurtis. Free shipping across India, order on WhatsApp.`,
   image: pic(fresh.find(p => p.imgs.length)?.imgs[0], 1200),
   body: `${crumbs([["Home", "/"], ["New arrivals", "/new-arrivals.html"]])}<section class="pagehead"><div class="wrap"><h1>New arrivals</h1><div class="zari" aria-hidden="true"></div></div></section>
-<section class="wrap shop catpage newpage"><p class="catintro">${fresh.length} new ${fresh.length === 1 ? "style" : "styles"} just arrived.</p><div class="grid">${fresh.map(p => card(p, cats)).join("")}</div></section>`,
+<section class="wrap shop catpage newpage"><p class="catintro">${fresh.length} new ${fresh.length === 1 ? "style" : "styles"} just arrived.</p><div class="grid">${fresh.map(p => card(p, cats)).join("")}</div></section>
+<section class="wrap allcta"><a class="btn primary" href="/index.html">See all products</a>${cats.map(c => `<a class="btn" href="/${catSlug(c)}.html">${esc(c[1])}</a>`).join("")}</section>`,
   schema: [crumbLD([["Home", "/"], ["New arrivals", "/new-arrivals.html"]])] }));
 // Saved copy of the sheet for instant loading (snapshot.json). Only the columns the website uses
 // are kept. Made only when the live sheet was read, so it is never older than the backup file.
-const KEEP = new Set(["id", "name", "category", "collection", "fabric_group", "colours", "sizes", "price", "sale", "delivery", "available", "featured", "image_url",
+const KEEP = new Set(["id", "added", "name", "category", "collection", "fabric_group", "colours", "sizes", "price", "sale", "delivery", "available", "featured", "image_url",
   "video_url", "description", "show", "isnew", "occ", "homecoll", "headline", "details", "start_date", "end_date", "offer_code", "discount", "min_order",
   "full_price_only", "button_text", "button_link", "colour", "color"]);
 const csvCell = v => /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
@@ -330,7 +339,10 @@ ${urls.map(([u, d]) => `  <url><loc>${SITE}${u}</loc>${d ? `<lastmod>${d}</lastm
 writeFileSync("feed.xml", feed(items));
 // Home page intro: point category links at the new category pages (only for categories that have products)
 let home = index.replace(/\n?<!-- preload -->[\s\S]*?<!-- \/preload -->/, "");
-home = home.replace("</head>", "<!-- preload -->\n" + PRELOAD + "\n<!-- /preload -->\n</head>");
+// Landing page: while products are marked New Arrival, a visitor who opens tarasvini.com from outside
+// goes to the New arrivals page first (once per visit; Home/logo still open this page; search engines stay here).
+const LANDING = items.some(p => p.isnew && !p.sold) ? `<script>(function(){try{if(location.search||location.hash||/bot|crawl|spider|slurp|google|bing|yandex|baidu|duckduck|lighthouse|facebookexternalhit|whatsapp|preview/i.test(navigator.userAgent))return;if(sessionStorage.getItem("landed"))return;sessionStorage.setItem("landed","1");var r=document.referrer;if(r&&new URL(r).host===location.host)return;location.replace("/new-arrivals.html")}catch(e){}})()</script>` : "";
+home = home.replace("</head>", "<!-- preload -->\n" + PRELOAD + (LANDING ? "\n" + LANDING : "") + "\n<!-- /preload -->\n</head>");
 const intro = home.match(/<section class="block seointro"[\s\S]*?<\/section>/);
 if (intro) {
   const fixed = intro[0].replace(/href="index\.html\?cat=([^"]+)"/g, (m, v) => { const c = present.find(x => x[0] === catInfo(decodeURIComponent(v))[0]); return c ? `href="${catSlug(c)}.html"` : m; });

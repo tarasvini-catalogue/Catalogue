@@ -242,3 +242,35 @@ shown by collection.html until the next deploy.
 - /new-arrivals.html lists every product with New Arrival = Yes, from all categories, with buttons
   to narrow it by category. "New arrivals" appears first in the menu (and in the footer) whenever
   at least one product is marked New Arrival. The list is read live from the sheet.
+
+
+## Home page sections (top to bottom)
+
+1. Top banner: one slide per collection (Home Collection names first), each showing 5 full product cards.
+2. Promise strip.
+3. Shop by category: one photo tile per category (photo taken from a Featured/New product).
+4. Recently viewed (returning visitors).
+5. New arrivals row (New Arrival = Yes, all categories) with "View all" to /new-arrivals.html.
+6. Featured picks row (Featured = Yes, all categories).
+7. Festival banner: the first live offer from the Offers tab, with up to 3 products it applies to.
+8. The catalogue (category, filters, products).
+9. What our customers say: average rating and the 3 latest 4-5 star reviews from the reviews sheet.
+10. Questions customers ask (FAQ), also given to Google as FAQ data. Edit the text in index.html.
+Header icons (computer): Recently viewed and Shortlist with a count.
+
+
+## Product order: newest first
+
+Everywhere (catalogue, category pages, top banner, rows, collections, new arrivals, "More ..." rows)
+products are shown newest first. Without a date column, a row lower down in its tab counts as newer,
+so add new products at the bottom of the tab. Optional: add a "Date Added" column (e.g. 12/11/2026)
+and that date decides the order. Products without a photo yet come after, sold out last.
+
+
+## Landing page
+
+While at least one product is marked New Arrival (at the last deploy), someone who opens
+tarasvini.com from outside (Google, Instagram, a typed address) first sees /new-arrivals.html.
+This happens once per visit: the logo, Home and "See all products" open the full home page.
+Links with ?cat=, ?q= or a product, and search engines, are never redirected. When nothing is
+marked New Arrival, tarasvini.com opens the home page as before (after the next deploy).
